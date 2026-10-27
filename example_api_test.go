@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 
-	"github.com/d2jvkpn/odoo"
+	"github.com/d2jvkpn/odoo-go"
 )
 
 // exampleClient returns a client for a local server that answers each /json/2/<model>/<method> path

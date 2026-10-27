@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 
-	"github.com/d2jvkpn/odoo"
+	"github.com/d2jvkpn/odoo-go"
 )
 
 func ExampleClient_Call() {

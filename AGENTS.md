@@ -2,7 +2,7 @@
 
 ## What this repo is
 
-This Go 1.27 module, `github.com/d2jvkpn/odoo`, is a Go SDK for the Odoo JSON-2 API. It provides a
+This Go 1.27 module, `github.com/d2jvkpn/odoo-go`, is a Go SDK for the Odoo JSON-2 API. It provides a
 typed client (products, product categories, sales orders) and the `odoo-cli` command line tool.
 
 ## Project Layout

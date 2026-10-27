@@ -1,4 +1,4 @@
-module github.com/d2jvkpn/odoo
+module github.com/d2jvkpn/odoo-go
 
 go 1.27
 

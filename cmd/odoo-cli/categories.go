@@ -9,7 +9,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/d2jvkpn/odoo"
+	"github.com/d2jvkpn/odoo-go"
 )
 
 const categoriesUsage = `Usage:

@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/d2jvkpn/odoo"
+	"github.com/d2jvkpn/odoo-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

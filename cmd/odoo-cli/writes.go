@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/d2jvkpn/odoo"
+	"github.com/d2jvkpn/odoo-go"
 )
 
 // parseWriteFlags parses -config, -id and optionally -file for a write action.

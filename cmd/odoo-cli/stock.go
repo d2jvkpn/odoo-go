@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/d2jvkpn/odoo"
+	"github.com/d2jvkpn/odoo-go"
 )
 
 const stockUsage = `Usage:
