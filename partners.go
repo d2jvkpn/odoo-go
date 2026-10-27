@@ -12,20 +12,20 @@ type Partner struct {
 	Name    string         `json:"name"`
 	Email   OptionalString `json:"email"`
 	Phone   OptionalString `json:"phone"`
-	Ref     OptionalString `json:"ref"`
+	Ref     OptionalString `json:"ref"` // the caller's own identifier, e.g. "user-42"; not unique in Odoo
 	Street  OptionalString `json:"street"`
 	City    OptionalString `json:"city"`
 	Zip     OptionalString `json:"zip"`
-	Country Many2One       `json:"country_id"`
+	Country Many2One       `json:"country_id"` // res.country; zero ID when unset
 }
 
 // PartnerQuery filters and paginates partners. Limit defaults to 100 and Order to "id". Archived
 // partners are not returned.
 type PartnerQuery struct {
-	Domain []any
-	Limit  int
-	Offset int
-	Order  string
+	Domain []any  // Odoo domain, for example []any{[]any{"ref", "=", "u-42"}}; nil matches all
+	Limit  int    // zero means 100
+	Offset int    // records to skip
+	Order  string // Odoo order clause; empty means "id"
 }
 
 // SearchPartners returns res.partner records matching the query.
@@ -89,14 +89,14 @@ func (c *Client) GetPartner(ctx context.Context, id int) (*Partner, error) {
 // CreatePartnerRequest describes a new customer. Ref is the caller's own identifier (for example the
 // e-commerce user ID) and is not unique in Odoo. Empty optional fields are omitted.
 type CreatePartnerRequest struct {
-	Name      string `json:"name"`
-	Email     string `json:"email,omitempty"`
-	Phone     string `json:"phone,omitempty"`
-	Ref       string `json:"ref,omitempty"`
-	Street    string `json:"street,omitempty"`
-	City      string `json:"city,omitempty"`
-	Zip       string `json:"zip,omitempty"`
-	CountryID int    `json:"country_id,omitempty"`
+	Name      string `json:"name"`                 // required, not blank
+	Email     string `json:"email,omitempty"`      // optional
+	Phone     string `json:"phone,omitempty"`      // optional
+	Ref       string `json:"ref,omitempty"`        // optional caller identifier, e.g. "user-42"
+	Street    string `json:"street,omitempty"`     // optional
+	City      string `json:"city,omitempty"`       // optional
+	Zip       string `json:"zip,omitempty"`        // optional
+	CountryID int    `json:"country_id,omitempty"` // optional res.country ID; >= 0
 }
 
 func validateCreatePartner(input CreatePartnerRequest) error {
@@ -133,6 +133,7 @@ func (c *Client) CreatePartner(ctx context.Context, input CreatePartnerRequest) 
 }
 
 // UpdatePartnerRequest changes selected fields of a partner. Nil fields are left unchanged.
+// Name, if set, must not be blank; a pointer to "" clears the other text fields.
 type UpdatePartnerRequest struct {
 	Name      *string `json:"name,omitempty"`
 	Email     *string `json:"email,omitempty"`
@@ -141,7 +142,7 @@ type UpdatePartnerRequest struct {
 	Street    *string `json:"street,omitempty"`
 	City      *string `json:"city,omitempty"`
 	Zip       *string `json:"zip,omitempty"`
-	CountryID *int    `json:"country_id,omitempty"`
+	CountryID *int    `json:"country_id,omitempty"` // res.country ID; must not be negative
 }
 
 // UpdatePartner changes one partner. It returns ErrPartnerNotFound for an unknown ID and does not retry.

@@ -20,11 +20,11 @@ const (
 // CompleteName; website categories use DisplayName and ChildIDs.
 type ProductCategory struct {
 	ID           int      `json:"id"`
-	Name         string   `json:"name"`
-	CompleteName string   `json:"complete_name,omitempty"`
-	DisplayName  string   `json:"display_name,omitempty"`
-	Parent       Many2One `json:"parent_id"`
-	ChildIDs     []int    `json:"child_id,omitempty"`
+	Name         string   `json:"name"`                    // the category's own name
+	CompleteName string   `json:"complete_name,omitempty"` // full path, internal categories only
+	DisplayName  string   `json:"display_name,omitempty"`  // full path, website categories only
+	Parent       Many2One `json:"parent_id"`               // zero ID for a root category
+	ChildIDs     []int    `json:"child_id,omitempty"`      // direct children, website categories only
 }
 
 // ProductCategoryQuery filters and paginates categories. Type defaults to
@@ -33,12 +33,12 @@ type ProductCategory struct {
 // ParentID nil searches all levels; zero selects roots; a positive ID selects
 // direct children. Domain is combined with ParentID using implicit AND.
 type ProductCategoryQuery struct {
-	Type     CategoryType
-	Domain   []any
-	ParentID *int
-	Limit    int
-	Offset   int
-	Order    string
+	Type     CategoryType // optional; empty means InternalCategory
+	Domain   []any        // optional Odoo domain
+	ParentID *int         // optional; nil all levels, zero roots, positive direct children
+	Limit    int          // zero means 1000 (internal) or 100 (website)
+	Offset   int          // records to skip
+	Order    string       // Odoo order clause; empty means "id"
 }
 
 // categoryModel maps a category type to its Odoo model name.
@@ -158,8 +158,8 @@ func categoryDomain(query ProductCategoryQuery) ([]any, error) {
 // CreateProductCategoryRequest describes a new category. The JSON names are Odoo's field names. ParentID zero
 // creates a root category.
 type CreateProductCategoryRequest struct {
-	Name     string `json:"name"`
-	ParentID int    `json:"parent_id,omitempty"`
+	Name     string `json:"name"`                // required, not blank
+	ParentID int    `json:"parent_id,omitempty"` // optional parent category ID of the same type; >= 0
 }
 
 // CreateProductCategory creates one category in the selected model and returns its ID. It does not retry.
@@ -200,8 +200,8 @@ func (c *Client) CreateProductCategory(
 // UpdateProductCategoryRequest changes selected fields of a category. Nil fields are left unchanged;
 // a pointer to zero ParentID detaches the category from its parent.
 type UpdateProductCategoryRequest struct {
-	Name     *string `json:"name,omitempty"`
-	ParentID *int    `json:"parent_id,omitempty"`
+	Name     *string `json:"name,omitempty"`      // new name; must not be blank
+	ParentID *int    `json:"parent_id,omitempty"` // new parent ID; zero detaches
 }
 
 // UpdateProductCategory changes one category of the selected type. It returns

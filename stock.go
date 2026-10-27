@@ -13,10 +13,10 @@ const maxStockIDs = 200
 // measure. QtyAvailable is on hand, VirtualAvailable includes incoming and outgoing moves, and FreeQty
 // is on hand minus reservations. Requires Odoo's stock module.
 type ProductStock struct {
-	ID               int     `json:"id"`
-	QtyAvailable     float64 `json:"qty_available"`
-	VirtualAvailable float64 `json:"virtual_available"`
-	FreeQty          float64 `json:"free_qty"`
+	ID               int     `json:"id"`                // product.product ID
+	QtyAvailable     float64 `json:"qty_available"`     // on hand
+	VirtualAvailable float64 `json:"virtual_available"` // forecast: on hand plus incoming minus outgoing
+	FreeQty          float64 `json:"free_qty"`          // on hand minus reservations
 }
 
 // GetProductStock returns stock for the given product.product IDs in one request, at most 200 IDs. IDs
@@ -54,8 +54,8 @@ func (c *Client) GetProductStock(ctx context.Context, ids []int) ([]ProductStock
 
 // StockLocation is an internal stock.location, for example a warehouse's main stock location.
 type StockLocation struct {
-	ID   int    `json:"id"`
-	Name string `json:"complete_name"`
+	ID   int    `json:"id"`            // stock.location ID, the target of SetProductStock
+	Name string `json:"complete_name"` // full path such as "WH/Stock"
 }
 
 // ListStockLocations returns the internal stock locations, the valid targets for SetProductStock.

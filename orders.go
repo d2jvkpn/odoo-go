@@ -14,43 +14,49 @@ import (
 // SaleOrder contains a quotation or confirmed sales order.
 // Dates use Odoo's UTC "YYYY-MM-DD HH:MM:SS" representation.
 type SaleOrder struct {
-	ID             int             `json:"id"`
-	Name           string          `json:"name"`
-	Partner        Many2One        `json:"partner_id"`
-	DateOrder      string          `json:"date_order"`
-	State          string          `json:"state"`
-	AmountUntaxed  float64         `json:"amount_untaxed"`
-	AmountTax      float64         `json:"amount_tax"`
-	AmountTotal    float64         `json:"amount_total"`
-	Currency       Many2One        `json:"currency_id"`
-	ClientOrderRef OptionalString  `json:"client_order_ref"`
-	InvoiceStatus  OptionalString  `json:"invoice_status"`
+	ID        int      `json:"id"`
+	Name      string   `json:"name"`       // order number such as "S00042"
+	Partner   Many2One `json:"partner_id"` // customer (res.partner)
+	DateOrder string   `json:"date_order"` // UTC, e.g. "2026-10-27 08:30:00"
+	// State is Odoo's order state: "draft" (quotation), "sent" (quotation sent), "sale" (confirmed)
+	// or "cancel". The set depends on the Odoo version.
+	State         string   `json:"state"`
+	AmountUntaxed float64  `json:"amount_untaxed"` // total before tax, in Currency
+	AmountTax     float64  `json:"amount_tax"`     // tax total, in Currency
+	AmountTotal   float64  `json:"amount_total"`   // total including tax, in Currency
+	Currency      Many2One `json:"currency_id"`
+	// ClientOrderRef is the customer reference, for example "web-1001"; not unique.
+	ClientOrderRef OptionalString `json:"client_order_ref"`
+	// InvoiceStatus is Odoo's invoicing state: "no", "to invoice", "invoiced" or "upselling".
+	InvoiceStatus OptionalString `json:"invoice_status"`
+	// DeliveryStatus comes from sale_stock: "pending", "started", "partial" or "full"; empty when
+	// nothing is to be delivered.
 	DeliveryStatus OptionalString  `json:"delivery_status"`
-	Origin         OptionalString  `json:"origin"`
-	Note           OptionalString  `json:"note"`
-	LineIDs        []int           `json:"order_line"`
-	Lines          []SaleOrderLine `json:"lines,omitempty"`
+	Origin         OptionalString  `json:"origin"`          // free-text source document, e.g. "web"
+	Note           OptionalString  `json:"note"`            // terms and conditions, HTML, e.g. "<p>Delivery within 3 days</p>"
+	LineIDs        []int           `json:"order_line"`      // line IDs; always present
+	Lines          []SaleOrderLine `json:"lines,omitempty"` // filled only by GetSaleOrder
 }
 
 // SaleOrderLine may represent a product, a section or a note.
 // Sections and notes have no Product and a nonempty DisplayType.
 type SaleOrderLine struct {
 	ID            int            `json:"id"`
-	Product       Many2One       `json:"product_id"`
-	Name          string         `json:"name"`
-	Quantity      float64        `json:"product_uom_qty"`
-	UnitPrice     float64        `json:"price_unit"`
-	PriceSubtotal float64        `json:"price_subtotal"`
-	DisplayType   OptionalString `json:"display_type"`
+	Product       Many2One       `json:"product_id"`      // product.product; zero for sections and notes
+	Name          string         `json:"name"`            // line description
+	Quantity      float64        `json:"product_uom_qty"` // in the product's default unit of measure
+	UnitPrice     float64        `json:"price_unit"`      // per unit, before tax
+	PriceSubtotal float64        `json:"price_subtotal"`  // line total before tax
+	DisplayType   OptionalString `json:"display_type"`    // "line_section" or "line_note"; empty for products
 }
 
 // SaleOrderQuery accepts Odoo domain expressions. Limit defaults to 100;
 // Offset defaults to 0 and Order to "id desc".
 type SaleOrderQuery struct {
-	Domain []any
-	Limit  int
-	Offset int
-	Order  string
+	Domain []any  // Odoo domain, for example []any{[]any{"partner_id", "=", 7}}; nil matches all
+	Limit  int    // zero means 100
+	Offset int    // records to skip
+	Order  string // Odoo order clause; empty means "id desc"
 }
 
 // SearchSaleOrders returns order headers and line IDs, without fetching lines.
@@ -132,22 +138,24 @@ func (c *Client) GetSaleOrder(ctx context.Context, id int) (*SaleOrder, error) {
 // ClientOrderRef is a customer reference, not a unique/idempotency key. Origin is the free-text source
 // document, suited to a channel marker such as "web". Note is Odoo's terms and conditions: it is HTML,
 // is not escaped, and is printed on the quotation, so do not put internal data in it.
+//
+// Required: PartnerID (> 0) and at least one line. All other fields are optional.
 type CreateSaleOrderRequest struct {
-	PartnerID      int                   `json:"partner_id"                 validate:"gt=0"`
+	PartnerID      int                   `json:"partner_id"                 validate:"gt=0"` // required
 	PricelistID    int                   `json:"pricelist_id,omitempty"     validate:"gte=0"`
-	ClientOrderRef string                `json:"client_order_ref,omitempty"`
-	Origin         string                `json:"origin,omitempty"`
-	Note           string                `json:"note,omitempty"`
-	Lines          []CreateSaleOrderLine `json:"lines"                      validate:"min=1,dive"`
+	ClientOrderRef string                `json:"client_order_ref,omitempty"`                       // e.g. "web-1001"
+	Origin         string                `json:"origin,omitempty"`                                 // e.g. "web"
+	Note           string                `json:"note,omitempty"`                                   // HTML, e.g. "<p>Delivery within 3 days</p>"
+	Lines          []CreateSaleOrderLine `json:"lines"                      validate:"min=1,dive"` // required
 }
 
 // CreateSaleOrderLine references a product.product variant. Quantity uses the
 // product's default unit of measure. Nil UnitPrice lets Odoo compute the price;
 // a pointer to zero explicitly creates a free line.
 type CreateSaleOrderLine struct {
-	ProductID int      `json:"product_id"           validate:"gt=0"`
-	Quantity  float64  `json:"product_uom_qty"      validate:"gt=0"`
-	UnitPrice *float64 `json:"price_unit,omitempty" validate:"omitempty,gte=0"`
+	ProductID int      `json:"product_id"           validate:"gt=0"`            // required
+	Quantity  float64  `json:"product_uom_qty"      validate:"gt=0"`            // required
+	UnitPrice *float64 `json:"price_unit,omitempty" validate:"omitempty,gte=0"` // optional, >= 0
 }
 
 // validateCreateSaleOrder checks the request shape and numeric bounds. Odoo-side rules are left to the server.
@@ -335,9 +343,9 @@ func (c *Client) CancelSaleOrder(ctx context.Context, id int) error {
 // UpdateSaleOrderRequest changes selected text fields of an existing order. Nil fields are left
 // unchanged; a pointer to "" clears the field. Note is HTML and is printed on the quotation.
 type UpdateSaleOrderRequest struct {
-	ClientOrderRef *string `json:"client_order_ref,omitempty"`
-	Origin         *string `json:"origin,omitempty"`
-	Note           *string `json:"note,omitempty"`
+	ClientOrderRef *string `json:"client_order_ref,omitempty"` // customer reference
+	Origin         *string `json:"origin,omitempty"`           // source document
+	Note           *string `json:"note,omitempty"`             // terms and conditions, HTML
 }
 
 // UpdateSaleOrder changes the customer reference, source document, or note of one order. It returns

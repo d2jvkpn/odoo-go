@@ -7,10 +7,11 @@ import (
 )
 
 // Many2One decodes Odoo's [id, display_name] relation representation.
-// An unset relation (false or null) has ID zero. JSON output is an object.
+// An unset relation (false or null) has ID zero. JSON output is an object: Odoo's [7, "Alice"]
+// becomes {"id":7,"name":"Alice"}.
 type Many2One struct {
-	ID   int    `json:"id"`
-	Name string `json:"name"`
+	ID   int    `json:"id"`   // record ID; zero when the relation is unset
+	Name string `json:"name"` // display name of the related record
 }
 
 // UnmarshalJSON decodes [id, display_name], or false/null into the zero value.

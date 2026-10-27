@@ -10,11 +10,11 @@ import (
 // Product is a product.product variant. DefaultCode is the internal reference
 // (SKU) and is empty when unset.
 type Product struct {
-	ID          int            `json:"id"`
-	Name        string         `json:"name"`
-	DefaultCode OptionalString `json:"default_code"`
-	ListPrice   float64        `json:"list_price"`
-	Category    Many2One       `json:"categ_id"`
+	ID          int            `json:"id"`           // product.product ID, as used by order lines
+	Name        string         `json:"name"`         // display name
+	DefaultCode OptionalString `json:"default_code"` // internal reference (SKU); not unique in Odoo
+	ListPrice   float64        `json:"list_price"`   // sales price in the company currency
+	Category    Many2One       `json:"categ_id"`     // internal product.category
 	// SaleOK reports whether the product can be sold. IsStorable reports whether Odoo tracks its
 	// inventory; a product that does not has no stock, and SetProductStock refuses it.
 	SaleOK     bool `json:"sale_ok"`
@@ -23,11 +23,12 @@ type Product struct {
 
 // ProductQuery filters and paginates products. Limit defaults to 100 and
 // Order to "id". Domain is an Odoo domain; nil matches every visible product.
+// All fields are optional; a negative Limit or Offset is rejected.
 type ProductQuery struct {
-	Domain []any
-	Limit  int
-	Offset int
-	Order  string
+	Domain []any  // Odoo domain, for example []any{[]any{"sale_ok", "=", true}}; nil matches all
+	Limit  int    // maximum records per call; zero means 100
+	Offset int    // records to skip; zero means none
+	Order  string // Odoo order clause such as "name asc"; empty means "id"
 }
 
 // SearchProducts returns product.product records matching the query.
@@ -92,11 +93,11 @@ func (c *Client) GetProduct(ctx context.Context, id int) (*Product, error) {
 // leave Odoo's defaults in place; a pointer to zero or false is sent explicitly. CategoryID zero leaves the
 // default category.
 type CreateProductRequest struct {
-	Name        string   `json:"name"`
-	ListPrice   *float64 `json:"list_price,omitempty"`
-	DefaultCode string   `json:"default_code,omitempty"`
-	CategoryID  int      `json:"categ_id,omitempty"`
-	SaleOK      *bool    `json:"sale_ok,omitempty"`
+	Name        string   `json:"name"`                   // required, not blank
+	ListPrice   *float64 `json:"list_price,omitempty"`   // optional; finite and >= 0; nil keeps Odoo's default
+	DefaultCode string   `json:"default_code,omitempty"` // optional internal reference (SKU)
+	CategoryID  int      `json:"categ_id,omitempty"`     // optional product.category ID; >= 0
+	SaleOK      *bool    `json:"sale_ok,omitempty"`      // optional; nil keeps Odoo's default (sellable)
 	// IsStorable turns on inventory tracking (Odoo "Track Inventory"). Without it the product has no
 	// stock and SetProductStock refuses it. Nil leaves Odoo's default, which is off.
 	IsStorable *bool `json:"is_storable,omitempty"`
@@ -159,14 +160,14 @@ func (c *Client) CreateProduct(ctx context.Context, input CreateProductRequest) 
 }
 
 // UpdateProductRequest changes selected fields of a product.product variant. Nil fields are left
-// unchanged; a pointer to zero or false is sent explicitly.
+// unchanged; a pointer to zero or false is sent explicitly. Name, if set, must not be blank.
 type UpdateProductRequest struct {
-	Name        *string  `json:"name,omitempty"`
-	ListPrice   *float64 `json:"list_price,omitempty"`
-	DefaultCode *string  `json:"default_code,omitempty"`
-	CategoryID  *int     `json:"categ_id,omitempty"`
-	SaleOK      *bool    `json:"sale_ok,omitempty"`
-	IsStorable  *bool    `json:"is_storable,omitempty"`
+	Name        *string  `json:"name,omitempty"`         // new display name
+	ListPrice   *float64 `json:"list_price,omitempty"`   // new sales price
+	DefaultCode *string  `json:"default_code,omitempty"` // new internal reference; "" clears it
+	CategoryID  *int     `json:"categ_id,omitempty"`     // new product.category ID
+	SaleOK      *bool    `json:"sale_ok,omitempty"`      // whether the product can be sold
+	IsStorable  *bool    `json:"is_storable,omitempty"`  // whether inventory is tracked
 }
 
 // UpdateProduct changes one product. It returns ErrProductNotFound for an unknown ID and does not

@@ -413,6 +413,30 @@ Or set `odoo.max_retries` (0 to 10) in the YAML configuration, which also applie
 - Use `CallRead` for your own read-only model methods (`search_read`, `read`). Never use it for
   methods with side effects.
 
+## Field mapping and Odoo reference
+
+The SDK returns a fixed subset of Odoo fields; JSON names are the Odoo field names. Fields not
+listed here are not read, so use `CallRead` for anything else.
+
+| SDK type | Odoo model | Fields read |
+|----------|------------|-------------|
+| `Product` | `product.product` | `id`, `name`, `default_code`, `list_price`, `categ_id`, `sale_ok`, `is_storable` |
+| `ProductCategory` | `product.category` / `product.public.category` | `id`, `name`, `complete_name`, `display_name`, `parent_id`, `child_id` |
+| `SaleOrder` | `sale.order` | `id`, `name`, `partner_id`, `date_order`, `state`, `amount_untaxed`, `amount_tax`, `amount_total`, `currency_id`, `client_order_ref`, `invoice_status`, `delivery_status`, `origin`, `note`, `order_line` |
+| `SaleOrderLine` | `sale.order.line` | `id`, `product_id`, `name`, `product_uom_qty`, `price_unit`, `price_subtotal`, `display_type` |
+| `Partner` | `res.partner` | `id`, `name`, `email`, `phone`, `ref`, `street`, `city`, `zip`, `country_id` |
+| `ProductStock` | `product.product` | `id`, `qty_available`, `virtual_available`, `free_qty` |
+| `StockLocation` | `stock.location` | `id`, `complete_name` |
+
+The SDK does not duplicate Odoo's own documentation. For the protocol (authentication, request
+format, error codes) see the
+[official External API reference](https://www.odoo.com/documentation/19.0/developer/reference/external_api.html).
+Fields and methods of each model depend on the Odoo version and installed modules, so check them
+against your own database, for example with the `fields_get` model method through `CallRead`, or
+the database's built-in API documentation page if your version provides one.
+
+## Testing
+
 Run the tests and local examples (no real Odoo server or API key needed):
 
 ```sh
