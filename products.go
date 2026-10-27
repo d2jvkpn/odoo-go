@@ -7,13 +7,14 @@ import (
 	"strings"
 )
 
-// Product is a product.product variant. DefaultCode is the internal reference
-// (SKU) and is empty when unset.
+// Product is a product.product variant. Name, ListPrice, Category, SaleOK and IsStorable belong to
+// the shared product.template, so sibling variants report the same values. DefaultCode is the
+// internal reference (SKU) and is empty when unset.
 type Product struct {
 	ID          int            `json:"id"`           // product.product ID, as used by order lines
 	Name        string         `json:"name"`         // display name
 	DefaultCode OptionalString `json:"default_code"` // internal reference (SKU); not unique in Odoo
-	ListPrice   float64        `json:"list_price"`   // sales price in the company currency
+	ListPrice   float64        `json:"list_price"`   // template base price, no variant extras
 	Category    Many2One       `json:"categ_id"`     // internal product.category
 	// SaleOK reports whether the product can be sold. IsStorable reports whether Odoo tracks its
 	// inventory; a product that does not has no stock, and SetProductStock refuses it.
@@ -159,11 +160,13 @@ func (c *Client) CreateProduct(ctx context.Context, input CreateProductRequest) 
 	return templates[0].Variant.ID, nil
 }
 
-// UpdateProductRequest changes selected fields of a product.product variant. Nil fields are left
+// UpdateProductRequest changes selected fields of a product.product variant. Name, ListPrice,
+// CategoryID, SaleOK and IsStorable live on the shared product.template, so changing them through
+// one variant changes every sibling variant; only DefaultCode is per variant. Nil fields are left
 // unchanged; a pointer to zero or false is sent explicitly. Name, if set, must not be blank.
 type UpdateProductRequest struct {
 	Name        *string  `json:"name,omitempty"`         // new display name
-	ListPrice   *float64 `json:"list_price,omitempty"`   // new sales price
+	ListPrice   *float64 `json:"list_price,omitempty"`   // new template base price
 	DefaultCode *string  `json:"default_code,omitempty"` // new internal reference; "" clears it
 	CategoryID  *int     `json:"categ_id,omitempty"`     // new product.category ID
 	SaleOK      *bool    `json:"sale_ok,omitempty"`      // whether the product can be sold

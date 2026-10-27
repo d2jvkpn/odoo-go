@@ -205,8 +205,9 @@ go run ./cmd/odoo-cli categories update -id 7 -file patch.json
   (`"is_storable": true` in `products create` or `products update`), otherwise Odoo keeps its
   quantity at 0 and the SDK returns `ErrProductNotStorable`. It makes two writes (create a count,
   then apply it); if the second fails the error names the pending quant, and a later `stock set`
-  overwrites it. Confirmed orders reserve stock: `free_qty` drops when an order is confirmed and
-  returns when it is cancelled.
+  overwrites it. If stock moved in between, Odoo opens a conflict wizard instead of applying the
+  count and the SDK returns `ErrInventoryConflict`. Confirmed orders reserve stock: `free_qty`
+  drops when an order is confirmed and returns when it is cancelled.
 - `orders confirm|cancel` need `-yes`. They check the order state first (`ErrInvalidOrderState`)
   and are never retried. After a transport error the outcome is unknown: call `GetSaleOrder` and
   inspect `State` before trying again. Odoo may still refuse a cancel, for example for delivered
@@ -285,7 +286,7 @@ category, err := client.GetProductCategory(ctx, odoo.WebsiteCategory, 7)
 In the Go API, `Limit == 0` defaults to 1000 for backend categories and 100 for storefront
 categories, products and orders; negative paging values are errors. On the command line, omitting
 `-limit` uses those defaults and an explicit value must be positive. An empty list prints `[]`.
-Category endpoints are read-only.
+Categories can be read, created and updated; the list and get endpoints do not modify data.
 
 ## Pagination and counting
 

@@ -23,6 +23,9 @@ var (
 
 	// ErrProductNotStorable means the product does not track inventory, so it has no stock to set.
 	ErrProductNotStorable = errors.New("product does not track inventory")
+	// ErrInventoryConflict means Odoo answered the stock adjustment with a conflict wizard instead of
+	// applying it: stock moved after the count was created. The count is still pending on the quant.
+	ErrInventoryConflict = errors.New("inventory adjustment not applied: stock changed")
 	// ErrPartnerNotFound means no partner visible to this user matched.
 	ErrPartnerNotFound = errors.New("partner not found")
 	// ErrAmbiguousPartner means more than one partner carries the same ref.

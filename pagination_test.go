@@ -149,3 +149,30 @@ func TestAllProductCategoriesAndErrors(t *testing.T) {
 	require.Len(t, errs, 1)
 	assert.ErrorAs(t, errs[0], &httpErr)
 }
+
+func TestPaginateIteratorCanBeReused(t *testing.T) {
+	fetch := func(limit, offset int) ([]int, error) {
+		var page []int
+		for id := offset + 1; id <= 5 && id <= offset+limit; id++ {
+			page = append(page, id)
+		}
+		return page, nil
+	}
+	seq := paginate(2, 0, fetch)
+	collect := func(stopAfter int) []int {
+		var got []int
+		for v, err := range seq {
+			require.NoError(t, err)
+			got = append(got, v)
+			if len(got) == stopAfter {
+				break
+			}
+		}
+		return got
+	}
+
+	assert.Equal(t, []int{1, 2, 3, 4, 5}, collect(0))
+	assert.Equal(t, []int{1, 2, 3, 4, 5}, collect(0))
+	assert.Equal(t, []int{1, 2, 3}, collect(3))
+	assert.Equal(t, []int{1, 2, 3, 4, 5}, collect(0))
+}

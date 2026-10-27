@@ -129,3 +129,18 @@ func TestUpsertPartnerByRef(t *testing.T) {
 		assert.ErrorIs(t, err, ErrInvalidArgument)
 	})
 }
+
+func TestSearchPartnersDecodesUnnamedAddress(t *testing.T) {
+	client := orderTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `[{"id":7,"name":false,"street":"1 Main Street","country_id":false},`+
+			`{"id":8,"name":"Ann","country_id":[3,"France"]}]`)
+	})
+
+	partners, err := client.SearchPartners(context.Background(), PartnerQuery{})
+	require.NoError(t, err)
+	require.Len(t, partners, 2)
+	assert.Equal(t, "", partners[0].Name)
+	assert.Equal(t, OptionalString("1 Main Street"), partners[0].Street)
+	assert.Equal(t, "Ann", partners[1].Name)
+	assert.Equal(t, 3, partners[1].Country.ID)
+}

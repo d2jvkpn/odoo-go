@@ -2,11 +2,13 @@ package odoo
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 )
 
-// Partner is a res.partner record. Optional text fields are empty when unset in Odoo.
+// Partner is a res.partner record. Optional text fields, including the name of an unnamed address,
+// are empty when unset in Odoo.
 type Partner struct {
 	ID      int            `json:"id"`
 	Name    string         `json:"name"`
@@ -17,6 +19,23 @@ type Partner struct {
 	City    OptionalString `json:"city"`
 	Zip     OptionalString `json:"zip"`
 	Country Many2One       `json:"country_id"` // res.country; zero ID when unset
+}
+
+// UnmarshalJSON decodes a partner, mapping the unset name Odoo returns as false (typical of
+// invoice and delivery addresses) to the empty string.
+func (p *Partner) UnmarshalJSON(data []byte) error {
+	type plain Partner
+	var aux struct {
+		plain
+		Name OptionalString `json:"name"`
+	}
+
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	*p = Partner(aux.plain)
+	p.Name = string(aux.Name)
+	return nil
 }
 
 // PartnerQuery filters and paginates partners. Limit defaults to 100 and Order to "id". Archived

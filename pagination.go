@@ -22,18 +22,20 @@ func (c *Client) count(ctx context.Context, model string, domain []any) (int, er
 	return total, nil
 }
 
-// paginate yields every record by fetching pages of pageSize starting at offset. It stops after a
-// short page, after the first error (yielded once), or when the consumer stops iterating.
+// paginate yields every record by fetching pages of pageSize starting at start. Each
+// traversal of the returned iterator begins again at start. It stops after a short page, after the
+// first error (yielded once), or when the consumer stops iterating.
 // Offset pagination can skip or repeat records if the data changes between pages.
 func paginate[T any](
-	pageSize, offset int,
+	pageSize, start int,
 	fetch func(limit, offset int) ([]T, error),
 ) iter.Seq2[T, error] {
 	return func(yield func(T, error) bool) {
 		var (
-			page []T
-			item T
-			err  error
+			offset = start
+			page   []T
+			item   T
+			err    error
 		)
 
 		for {

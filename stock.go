@@ -1,7 +1,9 @@
 package odoo
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
 )
@@ -93,6 +95,7 @@ func (c *Client) SetProductStock(ctx context.Context, productID, locationID int,
 			IsStorable bool `json:"is_storable"`
 		}
 		quantIDs []int
+		applied  json.RawMessage
 		adjust   = map[string]any{"inventory_mode": true}
 	)
 
@@ -131,10 +134,16 @@ func (c *Client) SetProductStock(ctx context.Context, productID, locationID int,
 	}
 	err = c.Call(ctx, "stock.quant", "action_apply_inventory", map[string]any{
 		"ids": quantIDs, "context": adjust,
-	}, nil)
+	}, &applied)
 	if err != nil {
 		return fmt.Errorf("apply stock of product %d (pending count left on quant %d): %w",
 			productID, quantIDs[0], err)
+	}
+	// A completed adjustment returns no value; an action dict means a wizard (for example
+	// stock.inventory.conflict) was opened and nothing was applied.
+	if trimmed := bytes.TrimSpace(applied); len(trimmed) > 0 && trimmed[0] == '{' {
+		return fmt.Errorf("apply stock of product %d (pending count left on quant %d): %w",
+			productID, quantIDs[0], ErrInventoryConflict)
 	}
 	return nil
 }

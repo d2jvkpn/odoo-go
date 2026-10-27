@@ -141,3 +141,22 @@ func TestIsStorableIsSentOnCreateAndUpdate(t *testing.T) {
 	require.NoError(t, client.UpdateProduct(context.Background(), 21, UpdateProductRequest{IsStorable: &off}))
 	assertJSON(t, writes[0], `{"ids":[21],"vals":{"is_storable":false}}`)
 }
+
+func TestSetProductStockReportsInventoryConflict(t *testing.T) {
+	client := orderTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/json/2/product.product/search_read":
+			fmt.Fprint(w, `[{"id":21,"is_storable":true}]`)
+		case "/json/2/stock.quant/create":
+			fmt.Fprint(w, `[9]`)
+		case "/json/2/stock.quant/action_apply_inventory":
+			fmt.Fprint(w, `{"type":"ir.actions.act_window","res_model":"stock.inventory.conflict"}`)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+
+	err := client.SetProductStock(context.Background(), 21, 5, 30)
+	require.ErrorIs(t, err, ErrInventoryConflict)
+	assert.Contains(t, err.Error(), "quant 9")
+}
