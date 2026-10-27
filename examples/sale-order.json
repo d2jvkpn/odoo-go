@@ -1,6 +1,8 @@
 {
   "partner_id": 15,
   "client_order_ref": "WX202610270001",
+  "origin": "web",
+  "note": "<p>Leave at door</p>",
   "lines": [
     {
       "product_id": 101,

@@ -18,6 +18,8 @@ const productsUsage = `Usage:
   odoo products count [-domain '[["sale_ok","=",true]]'] [-config configs/local.yaml]
   odoo products get -id ID [-config configs/local.yaml]
   odoo products create -file product.json [-config configs/local.yaml]
+  odoo products update -id ID -file patch.json [-config configs/local.yaml]
+  odoo products archive|unarchive -id ID [-config configs/local.yaml]
 
 With -all, list fetches every page into one JSON array and -limit is the page size.
 create writes a product to the configured Odoo database and prints the new product.product ID.
@@ -45,6 +47,9 @@ func runProducts(ctx context.Context, args []string, out io.Writer) error {
 	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" {
 		_, err = io.WriteString(out, productsUsage)
 		return err
+	}
+	if args[0] == "update" || args[0] == "archive" || args[0] == "unarchive" {
+		return runProductWrite(ctx, args[0], args[1:], out)
 	}
 	if args[0] != "list" && args[0] != "get" && args[0] != "count" && args[0] != "create" {
 		return fmt.Errorf("unknown products command %q; use -h for help", args[0])

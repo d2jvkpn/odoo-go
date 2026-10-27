@@ -20,6 +20,15 @@ var (
 	ErrProductCategoryNotFound = errors.New("product category not found")
 	// ErrSaleOrderNotFound means no order visible to this API user matched the ID.
 	ErrSaleOrderNotFound = errors.New("sales order not found")
+
+	// ErrProductNotStorable means the product does not track inventory, so it has no stock to set.
+	ErrProductNotStorable = errors.New("product does not track inventory")
+	// ErrPartnerNotFound means no partner visible to this user matched.
+	ErrPartnerNotFound = errors.New("partner not found")
+	// ErrAmbiguousPartner means more than one partner carries the same ref.
+	ErrAmbiguousPartner = errors.New("more than one partner has this ref")
+	// ErrInvalidOrderState means the order's state does not allow the requested transition.
+	ErrInvalidOrderState = errors.New("invalid sales order state")
 )
 
 // HTTPError is returned by Client.Call for a non-2xx response. Body holds at most 4096 bytes. Use errors.As to

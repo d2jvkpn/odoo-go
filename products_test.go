@@ -20,9 +20,9 @@ func TestSearchProducts(t *testing.T) {
 	client = orderTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/json/2/product.product/search_read", r.URL.Path)
 		assertJSON(t, requestParams(t, r), `{"domain":[["sale_ok","=",true]],`+
-			`"fields":["id","name","default_code","list_price","categ_id"],"limit":5,"offset":10,"order":"name"}`)
+			`"fields":["id","name","default_code","list_price","categ_id","sale_ok","is_storable"],"limit":5,"offset":10,"order":"name"}`)
 		fmt.Fprint(w, `[{"id":7,"name":"Desk","default_code":false,"list_price":100.5,`+
-			`"categ_id":[3,"Furniture"]}]`)
+			`"categ_id":[3,"Furniture"],"sale_ok":true,"is_storable":false}]`)
 	})
 
 	products, err = client.SearchProducts(context.Background(), ProductQuery{
@@ -33,7 +33,7 @@ func TestSearchProducts(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assertJSON(t, products, `[{"id":7,"name":"Desk","default_code":"","list_price":100.5,`+
-		`"categ_id":{"id":3,"name":"Furniture"}}]`)
+		`"categ_id":{"id":3,"name":"Furniture"},"sale_ok":true,"is_storable":false}]`)
 }
 
 func TestSearchProductsDefaultsAndEmpty(t *testing.T) {

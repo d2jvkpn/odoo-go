@@ -18,7 +18,8 @@ import (
 
 func TestRunPrintsProductsFromConfiguredServer(t *testing.T) {
 	for _, body := range []string{
-		`[{"id":7,"name":"Desk","default_code":"D-1","list_price":100,"categ_id":{"id":3,"name":"Furniture"}}]`,
+		`[{"id":7,"name":"Desk","default_code":"D-1","list_price":100,"categ_id":{"id":3,"name":"Furniture"},` +
+			`"sale_ok":true,"is_storable":true}]`,
 		`[]`,
 	} {
 		t.Run(body, func(t *testing.T) {
@@ -46,7 +47,7 @@ func TestRunPrintsProductsFromConfiguredServer(t *testing.T) {
 
 				want = map[string]any{
 					"domain": []any{[]any{"sale_ok", "=", true}},
-					"fields": []any{"id", "name", "default_code", "list_price", "categ_id"},
+					"fields": []any{"id", "name", "default_code", "list_price", "categ_id", "sale_ok", "is_storable"},
 					"limit":  float64(3),
 					"offset": float64(0),
 					"order":  "id",
@@ -57,7 +58,8 @@ func TestRunPrintsProductsFromConfiguredServer(t *testing.T) {
 					fmt.Fprint(w, body)
 					return
 				}
-				fmt.Fprint(w, `[{"id":7,"name":"Desk","default_code":"D-1","list_price":100,"categ_id":[3,"Furniture"]}]`)
+				fmt.Fprint(w, `[{"id":7,"name":"Desk","default_code":"D-1","list_price":100,"categ_id":[3,"Furniture"],`+
+					`"sale_ok":true,"is_storable":true}]`)
 			}))
 			defer server.Close()
 
@@ -139,7 +141,8 @@ func TestRunProductsGet(t *testing.T) {
 		assert.Equal(t, "/json/2/product.product/search_read", r.URL.Path)
 		assert.NoError(t, json.NewDecoder(r.Body).Decode(&params))
 		assert.Equal(t, []any{[]any{"id", "=", float64(7)}}, params["domain"])
-		fmt.Fprint(w, `[{"id":7,"name":"Desk","default_code":false,"list_price":100,"categ_id":[3,"Furniture"]}]`)
+		fmt.Fprint(w, `[{"id":7,"name":"Desk","default_code":false,"list_price":100,"categ_id":[3,"Furniture"],`+
+			`"sale_ok":false,"is_storable":true}]`)
 	}))
 	defer server.Close()
 
@@ -148,7 +151,8 @@ func TestRunProductsGet(t *testing.T) {
 	require.NoError(t, err)
 	assert.JSONEq(
 		t,
-		`{"id":7,"name":"Desk","default_code":"","list_price":100,"categ_id":{"id":3,"name":"Furniture"}}`,
+		`{"id":7,"name":"Desk","default_code":"","list_price":100,"categ_id":{"id":3,"name":"Furniture"},`+
+			`"sale_ok":false,"is_storable":true}`,
 		out.String(),
 	)
 }

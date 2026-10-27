@@ -4,7 +4,7 @@ A Go client for the
 [Odoo JSON-2 API](https://www.odoo.com/documentation/19.0/developer/reference/external_api.html)
 (available since Odoo 19). YAML configuration is loaded with `github.com/spf13/viper`.
 
-The CLI lives in `cmd/odoo-cli` and has the `products`, `orders` and `categories` command groups:
+The CLI lives in `cmd/odoo-cli` and has the `products`, `orders`, `categories`, `partners` and `stock` command groups:
 
 ```sh
 go run ./cmd/odoo-cli -h
@@ -115,6 +115,8 @@ each line to a `[0, 0, {...}]` entry in `order_line`. The sample sends this body
     {
       "partner_id": 15,
       "client_order_ref": "WX202610270001",
+      "origin": "web",
+      "note": "<p>Leave at door</p>",
       "order_line": [
         [0, 0, {"product_id": 101, "product_uom_qty": 2}],
         [0, 0, {"product_id": 102, "product_uom_qty": 5}]
@@ -134,6 +136,9 @@ Odoo returns an ID array (for example `[42]`); the Go method turns it into a sin
 - `client_order_ref` is the customer's order reference. It is **not guaranteed unique and does not
   make creation idempotent**. After a timeout, a dropped connection or a response decoding error
   the server may already have created the order; query to verify before retrying.
+- The optional `origin` is the free-text source document, handy for a channel marker such as `web`.
+  The optional `note` is Odoo's terms and conditions: it is **HTML, not escaped, and printed on the
+  quotation**, so do not put internal data in it. Both are returned when reading orders.
 - Detail reads the order and then its lines in two separate requests, so concurrent edits are not
   guaranteed to be seen as one snapshot.
 - Relation fields in results become `{"id":7,"name":"Customer"}`; an unset relation has ID 0, and
@@ -156,12 +161,71 @@ order, err := client.GetSaleOrder(ctx, 42)
 id, err := client.CreateSaleOrder(ctx, odoo.CreateSaleOrderRequest{
     PartnerID: 15,
     ClientOrderRef: "WX202610270001",
+    Origin: "web",
+    Note: "<p>Leave at door</p>",
     Lines: []odoo.CreateSaleOrderLine{
         {ProductID: 101, Quantity: 2}, // default pricing
         {ProductID: 102, Quantity: 5},
     },
 })
 // Handle err, then use id. Creation is never retried automatically.
+```
+
+## Customers, stock, and order transitions
+
+```sh
+go run ./cmd/odoo-cli partners list -limit 5
+go run ./cmd/odoo-cli partners get -id 15
+go run ./cmd/odoo-cli partners upsert -ref web-1001 -file examples/partner.json
+go run ./cmd/odoo-cli stock get -ids 21,22
+go run ./cmd/odoo-cli stock locations
+go run ./cmd/odoo-cli stock set -product-id 21 -location-id 5 -qty 30 -yes
+go run ./cmd/odoo-cli orders update -id 42 -file order-patch.json   # client_order_ref, origin, note
+go run ./cmd/odoo-cli orders confirm -id 42        # prints the action, sends nothing
+go run ./cmd/odoo-cli orders confirm -id 42 -yes   # confirms the quotation
+go run ./cmd/odoo-cli orders cancel -id 42 -yes
+go run ./cmd/odoo-cli products update -id 21 -file patch.json
+go run ./cmd/odoo-cli products archive -id 21      # unarchive restores it
+go run ./cmd/odoo-cli categories update -id 7 -file patch.json
+```
+
+- `partners upsert` stores your own user ID in the partner `ref`: it updates the active partner
+  with that ref, or creates one, and prints `{"id": N, "created": true|false}` (see
+  `examples/partner.response.json`). Archived partners are not searched, so an archived partner with that ref leads to a duplicate. Two
+  matches fail with `ErrAmbiguousPartner`. Odoo does not make
+  `ref` unique, so concurrent upserts for one **new** ref can create duplicates: in a test, 8 parallel
+  upserts created 8 partners, and every later upsert of that ref then fails with
+  `ErrAmbiguousPartner` until the duplicates are cleaned up in Odoo. Serialize upserts per ref (a
+  lock keyed by ref) or add a unique constraint on `res.partner.ref`. Different refs are independent.
+- `stock get` takes up to 200 `product.product` IDs and omits unknown ones (see
+  `examples/stock.response.json`). It needs Odoo's stock module.
+- `stock set` replaces the on-hand quantity of a product at a location (an inventory adjustment,
+  not an increment; `-qty 0` means sold out). It needs `-yes`, takes a location from
+  `stock locations`, and is never retried. The product must have inventory tracking on
+  (`"is_storable": true` in `products create` or `products update`), otherwise Odoo keeps its
+  quantity at 0 and the SDK returns `ErrProductNotStorable`. It makes two writes (create a count,
+  then apply it); if the second fails the error names the pending quant, and a later `stock set`
+  overwrites it. Confirmed orders reserve stock: `free_qty` drops when an order is confirmed and
+  returns when it is cancelled.
+- `orders confirm|cancel` need `-yes`. They check the order state first (`ErrInvalidOrderState`)
+  and are never retried. After a transport error the outcome is unknown: call `GetSaleOrder` and
+  inspect `State` before trying again. Odoo may still refuse a cancel, for example for delivered
+  or invoiced orders. Orders also report `invoice_status` and `delivery_status`; the latter comes from
+  Odoo's `sale_stock` module, so order reads fail on a database without it.
+- `orders update` changes only `client_order_ref`, `origin` and `note`; a pointer to `""` clears one.
+  Odoo may refuse the change on a locked order, which surfaces as an `*HTTPError`.
+- Updates take a patch with only the fields to change (`products update`, `categories update`,
+  `partners update`, `orders update`); an empty patch or an unknown ID is an error. Only products can be archived.
+
+```go
+id, created, err := client.UpsertPartnerByRef(ctx, "web-1001", odoo.CreatePartnerRequest{Name: "Ann"})
+stock, err := client.GetProductStock(ctx, []int{21, 22})
+err = client.SetProductStock(ctx, 21, 5, 30) // product, location, quantity on hand
+locations, err := client.ListStockLocations(ctx)
+err = client.ConfirmSaleOrder(ctx, 42)
+price := 12.5
+err = client.UpdateProduct(ctx, 21, odoo.UpdateProductRequest{ListPrice: &price})
+err = client.SetProductActive(ctx, 21, false)
 ```
 
 ## Querying product categories
@@ -189,7 +253,14 @@ go run ./cmd/odoo-cli categories get -id 7
 
 # Name filter with paging
 go run ./cmd/odoo-cli categories list -domain '[["name","ilike","Furniture"]]' -limit 20 -offset 20
+
+# Create a category from a request file (see examples/category.json)
+go run ./cmd/odoo-cli categories create -file examples/category.json
 ```
+
+`categories create` accepts `name` and an optional `parent_id` (omit it for a root category), honors
+`-type`, and prints the new ID (see `examples/category.response.json`). Like other writes it is
+never retried; after a transport error, check Odoo before resubmitting.
 
 Backend categories request `id`, `name`, `complete_name` and `parent_id`; `complete_name` is the
 full path (for example "Furniture / Desks"). Storefront categories request `id`, `name`,

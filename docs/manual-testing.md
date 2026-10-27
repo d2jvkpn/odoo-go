@@ -1,9 +1,10 @@
 # Manual Testing
 
 Manual checks against a live Odoo server, for behavior the `httptest` fixtures cannot prove. Run
-every command from the repository root. All commands below are read-only; never run
-`orders create` against a database that holds real data, because it writes a draft quotation and
-is never retried automatically.
+every command from the repository root. All commands below are read-only; never run any write
+command (`create`, `update`, `upsert`, `archive`, `stock set -yes`, `orders confirm|cancel -yes`)
+against a database that holds real data, because they write records and are never retried
+automatically.
 
 ## Prerequisites
 
@@ -39,6 +40,9 @@ go run ./cmd/odoo-cli orders count -domain '[["state","=","sale"]]'
 go run ./cmd/odoo-cli orders list -all -limit 20
 go run ./cmd/odoo-cli categories count
 go run ./cmd/odoo-cli categories list -all -limit 20
+go run ./cmd/odoo-cli partners list -limit 5
+go run ./cmd/odoo-cli stock get -ids 1
+go run ./cmd/odoo-cli stock locations
 ```
 
 ## Consistency checks

@@ -15,6 +15,10 @@
     "name": "USD"
   },
   "client_order_ref": "WX202610270001",
+  "invoice_status": "no",
+  "delivery_status": "pending",
+  "origin": "web",
+  "note": "<p>Leave at door</p>",
   "order_line": [11, 12],
   "lines": [
     {

@@ -6,5 +6,7 @@
   "categ_id": {
     "id": 4,
     "name": "All / Saleable / Tea"
-  }
+  },
+  "sale_ok": true,
+  "is_storable": true
 }

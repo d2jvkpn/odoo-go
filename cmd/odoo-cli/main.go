@@ -14,9 +14,11 @@ import (
 )
 
 const usage = `Usage:
-  odoo [-config configs/local.yaml] products list|get|count|create [options]
-  odoo [-config configs/local.yaml] orders list|get|count|create [options]
-  odoo [-config configs/local.yaml] categories list|get|count [options]
+  odoo [-config configs/local.yaml] products list|get|count|create|update|archive|unarchive [options]
+  odoo [-config configs/local.yaml] orders list|get|count|create|update|confirm|cancel [options]
+  odoo [-config configs/local.yaml] categories list|get|count|create|update [options]
+  odoo [-config configs/local.yaml] partners list|get|create|update|upsert [options]
+  odoo [-config configs/local.yaml] stock get|locations|set [options]
 
 Use -h after a command to see its options.
 -config may appear before the command group or after the action.
@@ -69,6 +71,10 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 		command = runOrders
 	case "categories":
 		command = runCategories
+	case "partners":
+		command = runPartners
+	case "stock":
+		command = runStock
 	default:
 		return fmt.Errorf("unknown command %q; use -h for help", args[0])
 	}

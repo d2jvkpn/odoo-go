@@ -15,7 +15,7 @@ import (
 
 const orderFixture = `[{"id":42,"name":"S00042","partner_id":[7,"Customer"],"date_order":"2026-10-27 10:00:00",` +
 	`"state":"draft","amount_untaxed":20,"amount_tax":2,"amount_total":22,"currency_id":[1,"USD"],` +
-	`"client_order_ref":false,"order_line":[11,12]}]`
+	`"client_order_ref":false,"origin":"web","note":"<p>Leave at door</p>","order_line":[11,12]}]`
 
 func orderTestClient(t *testing.T, handler http.HandlerFunc) *Client {
 	t.Helper()
@@ -70,7 +70,7 @@ func TestSearchSaleOrders(t *testing.T) {
 		assert.Equal(t, "/json/2/sale.order/search_read", r.URL.Path)
 		assertJSON(t, requestParams(t, r), `{"domain":[["partner_id","=",7],["state","=","sale"]],`+
 			`"limit":5,"offset":10,"order":"id desc","fields":["id","name","partner_id","date_order","state",`+
-			`"amount_untaxed","amount_tax","amount_total","currency_id","client_order_ref","order_line"]}`)
+			`"amount_untaxed","amount_tax","amount_total","currency_id","client_order_ref","invoice_status","delivery_status","origin","note","order_line"]}`)
 		fmt.Fprint(w, orderFixture)
 	})
 
@@ -87,6 +87,8 @@ func TestSearchSaleOrders(t *testing.T) {
 	assert.Equal(t, "Customer", orders[0].Partner.Name)
 	assert.Equal(t, float64(22), orders[0].AmountTotal)
 	assert.Empty(t, orders[0].ClientOrderRef)
+	assert.Equal(t, "web", string(orders[0].Origin))
+	assert.Equal(t, "<p>Leave at door</p>", string(orders[0].Note))
 }
 
 func TestSearchSaleOrdersDefaultsAndEmptyResult(t *testing.T) {
@@ -201,7 +203,7 @@ func TestCreateSaleOrder(t *testing.T) {
 		calls++
 		assert.Equal(t, "/json/2/sale.order/create", r.URL.Path)
 		assertJSON(t, requestParams(t, r), `{"vals_list":[{"partner_id":7,"pricelist_id":2,`+
-			`"client_order_ref":"web-123","order_line":[[0,0,{"product_id":3,"product_uom_qty":2}],`+
+			`"client_order_ref":"web-123","origin":"web","note":"<p>Leave at door</p>","order_line":[[0,0,{"product_id":3,"product_uom_qty":2}],`+
 			`[0,0,{"product_id":4,"product_uom_qty":1,"price_unit":0}],`+
 			`[0,0,{"product_id":5,"product_uom_qty":1.5,"price_unit":12.5}]]}]}`)
 		fmt.Fprint(w, "[42]")
@@ -212,6 +214,8 @@ func TestCreateSaleOrder(t *testing.T) {
 		PartnerID:      7,
 		PricelistID:    2,
 		ClientOrderRef: "web-123",
+		Origin:         "web",
+		Note:           "<p>Leave at door</p>",
 		Lines: []CreateSaleOrderLine{
 			{ProductID: 3, Quantity: 2},
 			{ProductID: 4, Quantity: 1, UnitPrice: &zero},

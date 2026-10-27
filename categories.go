@@ -3,6 +3,7 @@ package odoo
 import (
 	"context"
 	"fmt"
+	"strings"
 )
 
 // CategoryType selects either backend inventory categories or website categories.
@@ -152,4 +153,78 @@ func categoryDomain(query ProductCategoryQuery) ([]any, error) {
 		domain = append(domain, []any{"parent_id", "=", parent})
 	}
 	return domain, nil
+}
+
+// CreateProductCategoryRequest describes a new category. The JSON names are Odoo's field names. ParentID zero
+// creates a root category.
+type CreateProductCategoryRequest struct {
+	Name     string `json:"name"`
+	ParentID int    `json:"parent_id,omitempty"`
+}
+
+// CreateProductCategory creates one category in the selected model and returns its ID. It does not retry.
+// After a transport/decode error the write outcome may be unknown; check Odoo before resubmitting, to avoid
+// duplicates.
+func (c *Client) CreateProductCategory(
+	ctx context.Context,
+	kind CategoryType,
+	input CreateProductCategoryRequest,
+) (int, error) {
+	var (
+		err   error
+		model string
+		ids   []int
+	)
+
+	if model, err = categoryModel(kind); err != nil {
+		return 0, err
+	}
+	if strings.TrimSpace(input.Name) == "" {
+		return 0, invalidArgument("name must not be empty")
+	}
+	if input.ParentID < 0 {
+		return 0, invalidArgument("parent_id must not be negative")
+	}
+	err = c.Call(ctx, model, "create", map[string]any{"vals_list": []any{input}}, &ids)
+	if err != nil {
+		return 0, fmt.Errorf("create product category: %w", err)
+	}
+	if len(ids) != 1 || ids[0] <= 0 {
+		return 0, fmt.Errorf(
+			"%w: expected one positive ID from create (category may already exist)", ErrUnexpectedResponse,
+		)
+	}
+	return ids[0], nil
+}
+
+// UpdateProductCategoryRequest changes selected fields of a category. Nil fields are left unchanged;
+// a pointer to zero ParentID detaches the category from its parent.
+type UpdateProductCategoryRequest struct {
+	Name     *string `json:"name,omitempty"`
+	ParentID *int    `json:"parent_id,omitempty"`
+}
+
+// UpdateProductCategory changes one category of the selected type. It returns
+// ErrProductCategoryNotFound for an unknown ID and does not retry.
+func (c *Client) UpdateProductCategory(
+	ctx context.Context,
+	kind CategoryType,
+	id int,
+	patch UpdateProductCategoryRequest,
+) error {
+	var (
+		err   error
+		model string
+	)
+
+	if model, err = categoryModel(kind); err != nil {
+		return err
+	}
+	if patch.Name != nil && strings.TrimSpace(*patch.Name) == "" {
+		return invalidArgument("name must not be empty")
+	}
+	if patch.ParentID != nil && *patch.ParentID < 0 {
+		return invalidArgument("parent_id must not be negative")
+	}
+	return c.updateRecord(ctx, model, id, patch, ErrProductCategoryNotFound)
 }

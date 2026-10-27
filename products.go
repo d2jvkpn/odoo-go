@@ -15,6 +15,10 @@ type Product struct {
 	DefaultCode OptionalString `json:"default_code"`
 	ListPrice   float64        `json:"list_price"`
 	Category    Many2One       `json:"categ_id"`
+	// SaleOK reports whether the product can be sold. IsStorable reports whether Odoo tracks its
+	// inventory; a product that does not has no stock, and SetProductStock refuses it.
+	SaleOK     bool `json:"sale_ok"`
+	IsStorable bool `json:"is_storable"`
 }
 
 // ProductQuery filters and paginates products. Limit defaults to 100 and
@@ -50,7 +54,7 @@ func (c *Client) SearchProducts(ctx context.Context, query ProductQuery) ([]Prod
 	products = make([]Product, 0)
 	err = c.CallRead(ctx, "product.product", "search_read", map[string]any{
 		"domain": domain,
-		"fields": []string{"id", "name", "default_code", "list_price", "categ_id"},
+		"fields": []string{"id", "name", "default_code", "list_price", "categ_id", "sale_ok", "is_storable"},
 		"limit":  query.Limit,
 		"offset": query.Offset,
 		"order":  query.Order,
@@ -93,6 +97,9 @@ type CreateProductRequest struct {
 	DefaultCode string   `json:"default_code,omitempty"`
 	CategoryID  int      `json:"categ_id,omitempty"`
 	SaleOK      *bool    `json:"sale_ok,omitempty"`
+	// IsStorable turns on inventory tracking (Odoo "Track Inventory"). Without it the product has no
+	// stock and SetProductStock refuses it. Nil leaves Odoo's default, which is off.
+	IsStorable *bool `json:"is_storable,omitempty"`
 }
 
 // validateCreateProduct checks the request shape and numeric bounds. Odoo-side rules are left to the server.
@@ -149,4 +156,37 @@ func (c *Client) CreateProduct(ctx context.Context, input CreateProductRequest) 
 		)
 	}
 	return templates[0].Variant.ID, nil
+}
+
+// UpdateProductRequest changes selected fields of a product.product variant. Nil fields are left
+// unchanged; a pointer to zero or false is sent explicitly.
+type UpdateProductRequest struct {
+	Name        *string  `json:"name,omitempty"`
+	ListPrice   *float64 `json:"list_price,omitempty"`
+	DefaultCode *string  `json:"default_code,omitempty"`
+	CategoryID  *int     `json:"categ_id,omitempty"`
+	SaleOK      *bool    `json:"sale_ok,omitempty"`
+	IsStorable  *bool    `json:"is_storable,omitempty"`
+}
+
+// UpdateProduct changes one product. It returns ErrProductNotFound for an unknown ID and does not
+// retry; after a transport error the outcome may be unknown, so re-read the product before resending.
+func (c *Client) UpdateProduct(ctx context.Context, id int, patch UpdateProductRequest) error {
+	if patch.Name != nil && strings.TrimSpace(*patch.Name) == "" {
+		return invalidArgument("name must not be empty")
+	}
+	if p := patch.ListPrice; p != nil && (math.IsNaN(*p) || math.IsInf(*p, 0) || *p < 0) {
+		return invalidArgument("list_price must be finite and nonnegative")
+	}
+	if patch.CategoryID != nil && *patch.CategoryID <= 0 {
+		return invalidArgument("categ_id must be positive; a product always needs a category")
+	}
+	return c.updateRecord(ctx, "product.product", id, patch, ErrProductNotFound)
+}
+
+// SetProductActive archives (false) or restores (true) a product. It does not retry.
+func (c *Client) SetProductActive(ctx context.Context, id int, active bool) error {
+	return c.updateRecord(ctx, "product.product", id, struct {
+		Active bool `json:"active"`
+	}{active}, ErrProductNotFound)
 }

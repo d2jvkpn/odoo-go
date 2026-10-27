@@ -24,6 +24,10 @@ type SaleOrder struct {
 	AmountTotal    float64         `json:"amount_total"`
 	Currency       Many2One        `json:"currency_id"`
 	ClientOrderRef OptionalString  `json:"client_order_ref"`
+	InvoiceStatus  OptionalString  `json:"invoice_status"`
+	DeliveryStatus OptionalString  `json:"delivery_status"`
+	Origin         OptionalString  `json:"origin"`
+	Note           OptionalString  `json:"note"`
 	LineIDs        []int           `json:"order_line"`
 	Lines          []SaleOrderLine `json:"lines,omitempty"`
 }
@@ -73,7 +77,8 @@ func (c *Client) SearchSaleOrders(ctx context.Context, query SaleOrderQuery) ([]
 		"domain": query.Domain,
 		"fields": []string{
 			"id", "name", "partner_id", "date_order", "state", "amount_untaxed", "amount_tax",
-			"amount_total", "currency_id", "client_order_ref", "order_line",
+			"amount_total", "currency_id", "client_order_ref", "invoice_status", "delivery_status",
+			"origin", "note", "order_line",
 		},
 		"limit":  query.Limit,
 		"offset": query.Offset,
@@ -124,11 +129,15 @@ func (c *Client) GetSaleOrder(ctx context.Context, id int) (*SaleOrder, error) {
 
 // CreateSaleOrderRequest describes a draft quotation. PartnerID references
 // res.partner. PricelistID zero uses the customer's default pricelist.
-// ClientOrderRef is a customer reference, not a unique/idempotency key.
+// ClientOrderRef is a customer reference, not a unique/idempotency key. Origin is the free-text source
+// document, suited to a channel marker such as "web". Note is Odoo's terms and conditions: it is HTML,
+// is not escaped, and is printed on the quotation, so do not put internal data in it.
 type CreateSaleOrderRequest struct {
 	PartnerID      int                   `json:"partner_id"                 validate:"gt=0"`
 	PricelistID    int                   `json:"pricelist_id,omitempty"     validate:"gte=0"`
 	ClientOrderRef string                `json:"client_order_ref,omitempty"`
+	Origin         string                `json:"origin,omitempty"`
+	Note           string                `json:"note,omitempty"`
 	Lines          []CreateSaleOrderLine `json:"lines"                      validate:"min=1,dive"`
 }
 
@@ -230,6 +239,12 @@ func (c *Client) CreateSaleOrder(ctx context.Context, input CreateSaleOrderReque
 	if input.ClientOrderRef != "" {
 		values["client_order_ref"] = input.ClientOrderRef
 	}
+	if input.Origin != "" {
+		values["origin"] = input.Origin
+	}
+	if input.Note != "" {
+		values["note"] = input.Note
+	}
 	params = map[string]any{"vals_list": []any{values}}
 	if err = c.Call(ctx, "sale.order", "create", params, &ids); err != nil {
 		return 0, fmt.Errorf("create sales order: %w", err)
@@ -240,4 +255,94 @@ func (c *Client) CreateSaleOrder(ctx context.Context, input CreateSaleOrderReque
 		)
 	}
 	return ids[0], nil
+}
+
+// saleOrderState reads the order's state, or ErrSaleOrderNotFound.
+func (c *Client) saleOrderState(ctx context.Context, id int) (string, error) {
+	var (
+		err  error
+		rows []struct {
+			State string `json:"state"`
+		}
+	)
+
+	if id <= 0 {
+		return "", invalidArgument("sales order ID must be positive")
+	}
+	err = c.CallRead(ctx, "sale.order", "search_read", map[string]any{
+		"domain": []any{[]any{"id", "=", id}},
+		"fields": []string{"state"},
+		"limit":  1,
+	}, &rows)
+	if err != nil {
+		return "", fmt.Errorf("read sales order %d state: %w", id, err)
+	}
+	if len(rows) == 0 {
+		return "", fmt.Errorf("%w: %d", ErrSaleOrderNotFound, id)
+	}
+	return rows[0].State, nil
+}
+
+// ConfirmSaleOrder turns a draft or sent quotation into a confirmed order (action_confirm). It checks
+// the state first and returns ErrInvalidOrderState without writing when the order is not a quotation;
+// the gap between that check and the write is accepted and Odoo's own validation is authoritative.
+// It does not retry. After a transport error the outcome is unknown: call GetSaleOrder and inspect
+// State before trying again.
+func (c *Client) ConfirmSaleOrder(ctx context.Context, id int) error {
+	var (
+		err   error
+		state string
+	)
+
+	if state, err = c.saleOrderState(ctx, id); err != nil {
+		return err
+	}
+	if state != "draft" && state != "sent" {
+		return fmt.Errorf("%w: cannot confirm order %d in state %q", ErrInvalidOrderState, id, state)
+	}
+	if err = c.Call(ctx, "sale.order", "action_confirm", map[string]any{"ids": []int{id}}, nil); err != nil {
+		return fmt.Errorf("confirm sales order %d: %w", id, err)
+	}
+	return nil
+}
+
+// CancelSaleOrder cancels an order that is not already cancelled (action_cancel, with Odoo's
+// cancellation wizard suppressed). Odoo may still refuse, for example for delivered or invoiced orders;
+// that error passes through as an *HTTPError. It does not retry; see ConfirmSaleOrder for the
+// uncertain-outcome rule.
+func (c *Client) CancelSaleOrder(ctx context.Context, id int) error {
+	var (
+		err   error
+		state string
+	)
+
+	if state, err = c.saleOrderState(ctx, id); err != nil {
+		return err
+	}
+	if state == "cancel" {
+		return fmt.Errorf("%w: order %d is already cancelled", ErrInvalidOrderState, id)
+	}
+	err = c.Call(ctx, "sale.order", "action_cancel", map[string]any{
+		"ids":     []int{id},
+		"context": map[string]any{"disable_cancel_warning": true},
+	}, nil)
+	if err != nil {
+		return fmt.Errorf("cancel sales order %d: %w", id, err)
+	}
+	return nil
+}
+
+// UpdateSaleOrderRequest changes selected text fields of an existing order. Nil fields are left
+// unchanged; a pointer to "" clears the field. Note is HTML and is printed on the quotation.
+type UpdateSaleOrderRequest struct {
+	ClientOrderRef *string `json:"client_order_ref,omitempty"`
+	Origin         *string `json:"origin,omitempty"`
+	Note           *string `json:"note,omitempty"`
+}
+
+// UpdateSaleOrder changes the customer reference, source document, or note of one order. It returns
+// ErrSaleOrderNotFound for an unknown ID and does not retry. Odoo may refuse the change on a locked or
+// cancelled order; that error passes through as an *HTTPError.
+func (c *Client) UpdateSaleOrder(ctx context.Context, id int, patch UpdateSaleOrderRequest) error {
+	return c.updateRecord(ctx, "sale.order", id, patch, ErrSaleOrderNotFound)
 }

@@ -24,7 +24,8 @@ type Client struct {
 	HTTP *http.Client
 
 	// Retry controls retries of read-only calls (CallRead and the Search*/Get*
-	// methods). The zero value disables retries. Call and CreateSaleOrder never retry.
+	// methods). The zero value disables retries. Call and every write helper (Create*, Update*,
+	// UpsertPartnerByRef, SetProductActive, ConfirmSaleOrder, CancelSaleOrder) never retry.
 	Retry RetryPolicy
 }
 

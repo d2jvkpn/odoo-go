@@ -13,6 +13,8 @@ import (
 func TestExampleRequestFilesMatchTypes(t *testing.T) {
 	for file, target := range map[string]any{
 		"examples/product.json":    &CreateProductRequest{},
+		"examples/category.json":   &CreateProductCategoryRequest{},
+		"examples/partner.json":    &CreatePartnerRequest{},
 		"examples/sale-order.json": &CreateSaleOrderRequest{},
 	} {
 		t.Run(file, func(t *testing.T) {
