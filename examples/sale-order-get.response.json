@@ -1,0 +1,49 @@
+{
+  "id": 42,
+  "name": "S00042",
+  "partner_id": {
+    "id": 15,
+    "name": "Azure Interior"
+  },
+  "date_order": "2026-10-27 10:00:00",
+  "state": "draft",
+  "amount_untaxed": 150,
+  "amount_tax": 15,
+  "amount_total": 165,
+  "currency_id": {
+    "id": 1,
+    "name": "USD"
+  },
+  "client_order_ref": "WX202610270001",
+  "invoice_status": "no",
+  "delivery_status": "pending",
+  "origin": "web",
+  "note": "<p>Leave at door</p>",
+  "order_line": [11, 12],
+  "lines": [
+    {
+      "id": 11,
+      "product_id": {
+        "id": 101,
+        "name": "Green Tea 100g"
+      },
+      "name": "Green Tea 100g",
+      "product_uom_qty": 2,
+      "price_unit": 25,
+      "price_subtotal": 50,
+      "display_type": ""
+    },
+    {
+      "id": 12,
+      "product_id": {
+        "id": 102,
+        "name": "Black Tea 100g"
+      },
+      "name": "Black Tea 100g",
+      "product_uom_qty": 5,
+      "price_unit": 20,
+      "price_subtotal": 100,
+      "display_type": ""
+    }
+  ]
+}
