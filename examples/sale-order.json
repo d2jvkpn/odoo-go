@@ -1,0 +1,14 @@
+{
+  "partner_id": 15,
+  "client_order_ref": "WX202610270001",
+  "lines": [
+    {
+      "product_id": 101,
+      "product_uom_qty": 2
+    },
+    {
+      "product_id": 102,
+      "product_uom_qty": 5
+    }
+  ]
+}
