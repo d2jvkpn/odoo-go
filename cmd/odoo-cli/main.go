@@ -17,7 +17,7 @@ const usage = `Usage:
   odoo [-config configs/local.yaml] products list|get|count|create|update|archive|unarchive [options]
   odoo [-config configs/local.yaml] orders list|get|count|create|update|confirm|cancel [options]
   odoo [-config configs/local.yaml] categories list|get|count|create|update [options]
-  odoo [-config configs/local.yaml] partners list|get|create|update|upsert [options]
+  odoo [-config configs/local.yaml] partners list|get|create|update|upsert|tags [options]
   odoo [-config configs/local.yaml] countries list
   odoo [-config configs/local.yaml] stock get|locations|set [options]
 

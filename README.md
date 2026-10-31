@@ -186,6 +186,7 @@ id, err := client.CreateSaleOrder(ctx, odoo.CreateSaleOrderRequest{
 go run ./cmd/odoo-cli partners list -limit 5
 go run ./cmd/odoo-cli partners get -id 15
 go run ./cmd/odoo-cli partners upsert -ref web-1001 -file examples/partner.json
+go run ./cmd/odoo-cli partners tags    # id and name of partner tags; use the ids in category_id
 go run ./cmd/odoo-cli countries list   # id, name and ISO code; use the id as country_id
 go run ./cmd/odoo-cli stock get -ids 21,22
 go run ./cmd/odoo-cli stock locations
@@ -199,6 +200,11 @@ go run ./cmd/odoo-cli products archive -id 21      # unarchive restores it
 go run ./cmd/odoo-cli categories update -id 7 -file patch.json
 ```
 
+- `partners create`, `update` and `upsert` accept the base partner fields in the JSON file under their
+  Odoo names: `street2`, `state_id`, `website`, `is_company`, `type` (`contact`, `invoice`, `delivery`,
+  `other`), `parent_id`, `function`, `vat`, `company_registry`, `lang`, `comment`, `category_id` (a list
+  of tag IDs that replaces all tags), `user_id`, `company_id`, `barcode` and `industry_id`. In an update
+  patch, `0` clears a relation and `[]` removes all tags. `mobile` does not exist in Odoo 19.
 - `partners upsert` stores your own user ID in the partner `ref`: it updates the active partner
   with that ref, or creates one, and prints `{"id": N, "created": true|false}` (see
   `examples/partner.response.json`). Archived partners are not searched, so an archived partner with that ref leads to a duplicate. Two
@@ -436,7 +442,8 @@ listed here are not read, so use `CallRead` for anything else.
 | `ProductCategory` | `product.category` / `product.public.category` | `id`, `name`, `complete_name`, `display_name`, `parent_id`, `child_id`, `parent_path` |
 | `SaleOrder` | `sale.order` | `id`, `name`, `partner_id`, `date_order`, `state`, `amount_untaxed`, `amount_tax`, `amount_total`, `currency_id`, `client_order_ref`, `invoice_status`, `delivery_status`, `origin`, `note`, `order_line` |
 | `SaleOrderLine` | `sale.order.line` | `id`, `product_id`, `name`, `product_uom_qty`, `price_unit`, `price_subtotal`, `display_type` |
-| `Partner` | `res.partner` | `id`, `name`, `email`, `phone`, `ref`, `street`, `city`, `zip`, `country_id` |
+| `Partner` | `res.partner` | `id`, `name`, `email`, `phone`, `ref`, `street`, `street2`, `city`, `zip`, `state_id`, `country_id`, `website`, `is_company`, `type`, `parent_id`, `function`, `vat`, `company_registry`, `lang`, `comment`, `category_id`, `user_id`, `company_id`, `barcode`, `industry_id`, `create_date`, `write_date` |
+| `PartnerTag` | `res.partner.category` | `id`, `name`, `display_name` |
 | `Country` | `res.country` | `id`, `name`, `code` |
 | `ProductStock` | `product.product` | `id`, `qty_available`, `virtual_available`, `free_qty` |
 | `StockLocation` | `stock.location` | `id`, `complete_name` |

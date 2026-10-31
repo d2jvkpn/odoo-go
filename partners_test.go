@@ -2,6 +2,7 @@ package odoo
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"testing"
@@ -143,4 +144,136 @@ func TestSearchPartnersDecodesUnnamedAddress(t *testing.T) {
 	assert.Equal(t, OptionalString("1 Main Street"), partners[0].Street)
 	assert.Equal(t, "Ann", partners[1].Name)
 	assert.Equal(t, 3, partners[1].Country.ID)
+}
+
+func TestSearchPartnersRequestsAndDecodesBaseFields(t *testing.T) {
+	client := orderTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		fields, ok := requestParams(t, r)["fields"].([]any)
+		require.True(t, ok)
+		assert.Len(t, fields, len(partnerFields))
+		assert.Contains(t, fields, "category_id")
+		assert.NotContains(t, fields, "mobile") // removed in Odoo 19
+		fmt.Fprint(w, `[{"id":7,"name":"Ann","street2":"Floor 2","state_id":[5,"Oslo"],`+
+			`"website":"https://x.io","is_company":true,"type":"invoice","parent_id":[3,"Acme"],`+
+			`"function":"CEO","vat":"NO123","company_registry":"R-1","lang":"en_US","comment":"<p>vip</p>",`+
+			`"category_id":[1,2],"user_id":[2,"Bob"],"company_id":[1,"My Co"],"barcode":"B1",`+
+			`"industry_id":[4,"Retail"],"create_date":"2026-10-01 08:00:00","write_date":"2026-10-02 09:00:00"},`+
+			`{"id":8,"name":"Cy","street2":false,"state_id":false,"website":false,"is_company":false,`+
+			`"type":"contact","parent_id":false,"function":false,"vat":false,"company_registry":false,`+
+			`"lang":false,"comment":false,"category_id":[],"user_id":false,"company_id":false,`+
+			`"barcode":false,"industry_id":false,"create_date":"2026-10-01 08:00:00","write_date":false}]`)
+	})
+
+	partners, err := client.SearchPartners(context.Background(), PartnerQuery{})
+	require.NoError(t, err)
+	require.Len(t, partners, 2)
+
+	full := partners[0]
+	assert.Equal(t, Many2One{ID: 5, Name: "Oslo"}, full.State)
+	assert.Equal(t, Many2One{ID: 3, Name: "Acme"}, full.Parent)
+	assert.Equal(t, Many2One{ID: 2, Name: "Bob"}, full.User)
+	assert.Equal(t, 4, full.Industry.ID)
+	assert.True(t, full.IsCompany)
+	assert.Equal(t, "invoice", full.Type)
+	assert.Equal(t, OptionalString("NO123"), full.VAT)
+	assert.Equal(t, []int{1, 2}, full.CategoryIDs)
+	assert.Equal(t, OptionalString("2026-10-02 09:00:00"), full.WriteDate)
+
+	empty := partners[1]
+	assert.Empty(t, empty.Street2)
+	assert.Zero(t, empty.State.ID)
+	assert.Zero(t, empty.Company.ID)
+	assert.Empty(t, empty.Lang)
+	assert.Empty(t, empty.WriteDate)
+	assert.NotNil(t, empty.CategoryIDs)
+	assert.Empty(t, empty.CategoryIDs)
+}
+
+func TestCreatePartnerSendsBaseFields(t *testing.T) {
+	client := orderTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		assertJSON(t, requestParams(t, r), `{"vals_list":[{"name":"Acme","street2":"Floor 2","state_id":5,`+
+			`"website":"https://x.io","is_company":true,"type":"invoice","parent_id":3,"function":"CEO",`+
+			`"vat":"NO123","company_registry":"R-1","lang":"en_US","comment":"vip","category_id":[[6,0,[1,2]]],`+
+			`"user_id":2,"company_id":1,"barcode":"B1","industry_id":4}]}`)
+		fmt.Fprint(w, "[7]")
+	})
+	_, err := client.CreatePartner(context.Background(), CreatePartnerRequest{
+		Name: "Acme", Street2: "Floor 2", StateID: 5, Website: "https://x.io", IsCompany: true,
+		Type: "invoice", ParentID: 3, Function: "CEO", VAT: "NO123", CompanyRegistry: "R-1", Lang: "en_US",
+		Comment: "vip", CategoryIDs: ReplaceIDs{1, 2}, UserID: 2, CompanyID: 1, Barcode: "B1", IndustryID: 4,
+	})
+	require.NoError(t, err)
+}
+
+func TestPartnerRequestsRejectBadBaseFields(t *testing.T) {
+	var calls int
+
+	client := orderTestClient(t, func(w http.ResponseWriter, r *http.Request) { calls++ })
+	for name, in := range map[string]CreatePartnerRequest{
+		"bad type":     {Name: "A", Type: "home"},
+		"neg state":    {Name: "A", StateID: -1},
+		"neg parent":   {Name: "A", ParentID: -1},
+		"neg user":     {Name: "A", UserID: -1},
+		"neg company":  {Name: "A", CompanyID: -1},
+		"neg industry": {Name: "A", IndustryID: -1},
+		"zero tag":     {Name: "A", CategoryIDs: ReplaceIDs{0}},
+	} {
+		_, err := client.CreatePartner(context.Background(), in)
+		assert.ErrorIs(t, err, ErrInvalidArgument, name)
+	}
+
+	bad, neg, zero := "home", -1, ReplaceIDs{0}
+	for name, in := range map[string]UpdatePartnerRequest{
+		"bad type":   {Type: &bad},
+		"neg state":  {StateID: &neg},
+		"neg parent": {ParentID: &neg},
+		"zero tag":   {CategoryIDs: &zero},
+	} {
+		err := client.UpdatePartner(context.Background(), 7, in)
+		assert.ErrorIs(t, err, ErrInvalidArgument, name)
+	}
+	assert.Zero(t, calls)
+}
+
+func TestUpdatePartnerBaseFields(t *testing.T) {
+	var writes []map[string]any
+
+	client := orderTestClient(t, recordingHandler(t, "res.partner", &writes))
+	vat, zero, company, none := "NO123", 0, true, ReplaceIDs{}
+	err := client.UpdatePartner(context.Background(), 7, UpdatePartnerRequest{
+		VAT: &vat, ParentID: &zero, IsCompany: &company, CategoryIDs: &none,
+	})
+	require.NoError(t, err)
+	// a zero relation clears it (false), and an empty tag list removes every tag
+	assertJSON(t, writes[0], `{"ids":[7],"vals":{"vat":"NO123","parent_id":false,"is_company":true,`+
+		`"category_id":[[6,0,[]]]}}`)
+}
+
+func TestUpsertPartnerByRefMergesBaseFields(t *testing.T) {
+	var writes []map[string]any
+
+	handler := recordingHandler(t, "res.partner", &writes)
+	client := orderTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/json/2/res.partner/search_read" {
+			fmt.Fprintf(w, "["+partnerRow+"]", 7)
+			return
+		}
+		handler(w, r)
+	})
+	id, created, err := client.UpsertPartnerByRef(context.Background(), "u-1", CreatePartnerRequest{
+		Name: "Ann", VAT: "NO123", StateID: 5, IsCompany: true, CategoryIDs: ReplaceIDs{1},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 7, id)
+	assert.False(t, created)
+	assertJSON(t, writes[0], `{"ids":[7],"vals":{"name":"Ann","ref":"u-1","vat":"NO123","state_id":5,`+
+		`"is_company":true,"category_id":[[6,0,[1]]]}}`)
+}
+
+func TestReplaceIDsDecodesPlainList(t *testing.T) {
+	var in CreatePartnerRequest
+
+	require.NoError(t, json.Unmarshal([]byte(`{"name":"A","category_id":[3,4]}`), &in))
+	assert.Equal(t, ReplaceIDs{3, 4}, in.CategoryIDs)
+	assert.Error(t, json.Unmarshal([]byte(`{"name":"A","category_id":[[6,0,[1]]]}`), &in))
 }

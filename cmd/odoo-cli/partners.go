@@ -16,9 +16,11 @@ const partnersUsage = `Usage:
   odoo partners create -file partner.json [-config configs/local.yaml]
   odoo partners update -id ID -file patch.json [-config configs/local.yaml]
   odoo partners upsert -ref REF -file partner.json [-config configs/local.yaml]
+  odoo partners tags [-config configs/local.yaml]
 
 upsert matches an active partner by ref and updates it, or creates one. Concurrent upserts for the
-same ref may create duplicates; serialize them per ref.
+same ref may create duplicates; serialize them per ref. tags prints every partner tag as
+{id, name, display_name}; use the ids in category_id.
 `
 
 func runPartners(ctx context.Context, args []string, out io.Writer) error {
@@ -50,6 +52,7 @@ func runPartners(ctx context.Context, args []string, out io.Writer) error {
 		flags.IntVar(&query.Offset, "offset", 0, "number of partners to skip")
 		flags.StringVar(&query.Order, "order", "id", "Odoo sort expression")
 		flags.StringVar(&domain, "domain", "[]", "Odoo domain as a JSON array")
+	case "tags":
 	case "get":
 		flags.IntVar(&id, "id", 0, "partner ID")
 	case "create":
@@ -110,6 +113,8 @@ func runPartners(ctx context.Context, args []string, out io.Writer) error {
 	switch action {
 	case "list":
 		result, err = client.SearchPartners(ctx, query)
+	case "tags":
+		result, err = client.ListPartnerTags(ctx)
 	case "get":
 		result, err = client.GetPartner(ctx, id)
 	case "create":

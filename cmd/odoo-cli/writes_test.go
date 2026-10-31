@@ -207,3 +207,15 @@ func TestCountriesList(t *testing.T) {
 	_, err = runCLI(t, "-config", config, "countries", "list", "extra")
 	assert.Error(t, err)
 }
+
+func TestPartnersTags(t *testing.T) {
+	config, _ := cliServer(t, map[string]string{
+		"res.partner.category/search_read": `[{"id":2,"name":"VIP","display_name":"VIP"}]`,
+	})
+	out, err := runCLI(t, "-config", config, "partners", "tags")
+	require.NoError(t, err)
+	assert.JSONEq(t, `[{"id":2,"name":"VIP","display_name":"VIP"}]`, out)
+
+	_, err = runCLI(t, "-config", config, "partners", "tags", "extra")
+	assert.Error(t, err)
+}
