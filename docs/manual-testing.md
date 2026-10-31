@@ -1,10 +1,10 @@
 # Manual Testing
 
 Manual checks against a live Odoo server, for behavior the `httptest` fixtures cannot prove. Run
-every command from the repository root. All commands below are read-only; never run any write
-command (`create`, `update`, `upsert`, `archive`, `stock set -yes`, `orders confirm|cancel -yes`)
-against a database that holds real data, because they write records and are never retried
-automatically.
+every command from the repository root. All commands are read-only except those under
+[Order write tests](#order-write-tests); never run any write command (`create`, `update`, `upsert`,
+`archive`, `stock set -yes`, `orders confirm|cancel -yes`) against a database that holds real data,
+because they write records and are never retried automatically.
 
 ## Prerequisites
 
@@ -59,3 +59,42 @@ Expected results; any mismatch is a bug in paging or counting.
 go run ./cmd/odoo-cli products count -domain '[["id","=",-1]]'
 go run ./cmd/odoo-cli products list -domain '[["id","=",-1]]'
 ```
+
+## Order write tests
+
+Run these only against a test database, never one that holds real data. Keep request files under
+`data/tests/orders/`.
+
+- Use a dedicated test partner, never the company's own contact (partner ID 1 in the current test
+  database). Odoo gives the company's contact transit stock locations, so `orders confirm` fails
+  with `No rule has been found to replenish ... in Inter-warehouse transit`. A partner created
+  through `partners create` gets the default Customer Location (`Customers`) and confirms
+  normally. The current test database has one: ID 552, `ref` `odoo-go-test`.
+- Create the test partner if it is missing; look it up first, because `create` does not check for
+  duplicates. `data/tests/orders/partner-test.json`:
+
+```json
+{"name": "odoo-go test customer", "ref": "odoo-go-test", "phone": "13800000000", "country_id": 48}
+```
+
+```sh
+go run ./cmd/odoo-cli partners list -domain '[["ref","=","odoo-go-test"]]'
+go run ./cmd/odoo-cli partners create -file data/tests/orders/partner-test.json
+```
+
+- Set `origin` to `odoo-go-test` on every test order, so they can be filtered and cleaned up in
+  Odoo, and give each a unique `client_order_ref`.
+- Each step reads back with `orders get -id ID`; compare `state`, line prices and `amount_total`:
+
+```sh
+go run ./cmd/odoo-cli orders create -file data/tests/orders/order.json
+go run ./cmd/odoo-cli orders update -id ID -file data/tests/orders/patch.json
+go run ./cmd/odoo-cli orders confirm -id ID -yes
+go run ./cmd/odoo-cli orders cancel -id ID -yes
+go run ./cmd/odoo-cli orders list -domain '[["origin","=","odoo-go-test"]]' -order id
+```
+
+- A confirmed order has `state` `sale` and `delivery_status` `pending`. Delivery, invoicing and
+  payment are not covered by the SDK; check them in Odoo.
+- The SDK cannot delete orders or set a partner's stock locations (shown only in Odoo developer
+  mode). Clean up in the Odoo UI.

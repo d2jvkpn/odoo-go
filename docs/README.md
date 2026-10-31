@@ -28,5 +28,6 @@
 ## Index
 
 - [README.md](../README.md): CLI and Go API usage, with examples for every endpoint.
-- [manual-testing.md](manual-testing.md): read-only CLI checks against a live Odoo server.
+- [manual-testing.md](manual-testing.md): CLI checks against a live Odoo server, read-only plus
+  order write tests for a test database.
 - `records/` holds workflow output (plans, specs, reviews) and is deliberately not indexed.
