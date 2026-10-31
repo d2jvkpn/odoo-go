@@ -193,3 +193,17 @@ func TestStockLocationsAndSet(t *testing.T) {
 	}
 	assert.Len(t, *paths, before+3) // rejected locally
 }
+
+func TestCountriesList(t *testing.T) {
+	config, _ := cliServer(t, map[string]string{
+		"res.country/search_read": `[{"id":161,"name":"Norway","code":"NO"}]`,
+	})
+	out, err := runCLI(t, "-config", config, "countries", "list")
+	require.NoError(t, err)
+	assert.JSONEq(t, `[{"id":161,"name":"Norway","code":"NO"}]`, out)
+
+	_, err = runCLI(t, "-config", config, "countries", "get")
+	assert.Error(t, err)
+	_, err = runCLI(t, "-config", config, "countries", "list", "extra")
+	assert.Error(t, err)
+}

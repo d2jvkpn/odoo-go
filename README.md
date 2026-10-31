@@ -186,6 +186,7 @@ id, err := client.CreateSaleOrder(ctx, odoo.CreateSaleOrderRequest{
 go run ./cmd/odoo-cli partners list -limit 5
 go run ./cmd/odoo-cli partners get -id 15
 go run ./cmd/odoo-cli partners upsert -ref web-1001 -file examples/partner.json
+go run ./cmd/odoo-cli countries list   # id, name and ISO code; use the id as country_id
 go run ./cmd/odoo-cli stock get -ids 21,22
 go run ./cmd/odoo-cli stock locations
 go run ./cmd/odoo-cli stock set -product-id 21 -location-id 5 -qty 30 -yes
@@ -436,6 +437,7 @@ listed here are not read, so use `CallRead` for anything else.
 | `SaleOrder` | `sale.order` | `id`, `name`, `partner_id`, `date_order`, `state`, `amount_untaxed`, `amount_tax`, `amount_total`, `currency_id`, `client_order_ref`, `invoice_status`, `delivery_status`, `origin`, `note`, `order_line` |
 | `SaleOrderLine` | `sale.order.line` | `id`, `product_id`, `name`, `product_uom_qty`, `price_unit`, `price_subtotal`, `display_type` |
 | `Partner` | `res.partner` | `id`, `name`, `email`, `phone`, `ref`, `street`, `city`, `zip`, `country_id` |
+| `Country` | `res.country` | `id`, `name`, `code` |
 | `ProductStock` | `product.product` | `id`, `qty_available`, `virtual_available`, `free_qty` |
 | `StockLocation` | `stock.location` | `id`, `complete_name` |
 

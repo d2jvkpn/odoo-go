@@ -6,8 +6,8 @@
   `/json/2/<model>/<method>` with a bearer API key and optional `X-Odoo-Database` header; typed
   helpers (`SearchProducts`, `SearchProductCategories`, `SearchSaleOrders`, `SearchPartners`,
   `CreateSaleOrder`, `CreateProduct`, `CreateProductCategory`, `CreatePartner`, and their `Get*`
-  counterparts) are built on it, plus `GetProductStock`, `ListStockLocations`, `SetProductStock`,
-  the `Update*`/`SetProductActive` writes, `UpsertPartnerByRef`, and
+  counterparts) are built on it, plus `GetProductStock`, `ListStockLocations`, `ListCountries`,
+  `SetProductStock`, the `Update*`/`SetProductActive` writes, `UpsertPartnerByRef`, and
   `ConfirmSaleOrder`/`CancelSaleOrder`. Writes share the helpers in `write.go`; there is no
   exported generic write or delete, and only products can be archived.
 - `cmd/odoo-cli` only parses arguments and prints JSON; reusable API behavior belongs in the root
@@ -21,8 +21,9 @@
   `odoo.LoadClient`; default path `configs/local.yaml`, which is not committed.
 - Write calls such as order, product, and partner creation, updates, stock changes, order
   confirm/cancel, and the generic `Call` are never retried automatically. `Client.Retry` (or
-  `odoo.max_retries`) opts read-only calls (`CallRead`, `Search*`, `Get*`, `GetProductStock`,
-  `ListStockLocations`) into retries of transient failures only.
+  `odoo.max_retries`) opts read-only calls (`CallRead`, `Search*`, `Get*`,
+  `GetProductStock`, `ListStockLocations`, `ListCountries`) into retries of transient failures
+  only.
 
 ## Index
 

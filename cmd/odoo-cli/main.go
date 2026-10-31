@@ -18,6 +18,7 @@ const usage = `Usage:
   odoo [-config configs/local.yaml] orders list|get|count|create|update|confirm|cancel [options]
   odoo [-config configs/local.yaml] categories list|get|count|create|update [options]
   odoo [-config configs/local.yaml] partners list|get|create|update|upsert [options]
+  odoo [-config configs/local.yaml] countries list
   odoo [-config configs/local.yaml] stock get|locations|set [options]
 
 Use -h after a command to see its options.
@@ -73,6 +74,8 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 		command = runCategories
 	case "partners":
 		command = runPartners
+	case "countries":
+		command = runCountries
 	case "stock":
 		command = runStock
 	default:
