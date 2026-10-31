@@ -36,7 +36,7 @@ func TestSearchProductCategories(t *testing.T) {
 						`"parent_id":[1,"Furniture"],"child_id":[3,4]}]`)
 				} else {
 					assertJSON(t, requestParams(t, r), `{"domain":[["name","ilike","Desk"]],`+
-						`"fields":["id","name","complete_name","parent_id"],`+
+						`"fields":["id","name","complete_name","parent_id","child_id","parent_path"],`+
 						`"limit":5,"offset":10,"order":"id desc"}`)
 					fmt.Fprint(w, `[{"id":2,"name":"Desks","complete_name":"Furniture / Desks",`+
 						`"parent_id":[1,"Furniture"]}]`)
@@ -126,7 +126,7 @@ func TestCategoryEmptySearch(t *testing.T) {
 
 		params = requestParams(t, r)
 		assertJSON(t, params["domain"], "[]")
-		assertJSON(t, params["fields"], `["id","name","complete_name","parent_id"]`)
+		assertJSON(t, params["fields"], `["id","name","complete_name","parent_id","child_id","parent_path"]`)
 		assert.Equal(t, float64(1000), params["limit"])
 		fmt.Fprint(w, "[]")
 	})
@@ -163,7 +163,7 @@ func TestGetInternalCategoryCompleteName(t *testing.T) {
 		var params map[string]any
 
 		params = requestParams(t, r)
-		assertJSON(t, params["fields"], `["id","name","complete_name","parent_id"]`)
+		assertJSON(t, params["fields"], `["id","name","complete_name","parent_id","child_id","parent_path"]`)
 		assertJSON(t, params["domain"], `[["id","=",2]]`)
 		assert.Equal(t, float64(1), params["limit"])
 		fmt.Fprint(w, `[{"id":2,"name":"Desks","complete_name":"Furniture / Desks","parent_id":[1,"Furniture"]}]`)

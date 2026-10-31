@@ -2,6 +2,7 @@ package odoo
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
 	"strings"
@@ -20,7 +21,55 @@ type Product struct {
 	// inventory; a product that does not has no stock, and SetProductStock refuses it.
 	SaleOK     bool `json:"sale_ok"`
 	IsStorable bool `json:"is_storable"`
+
+	// The fields below are filled only when ProductQuery.Details is set; they are zero, and left
+	// out of the JSON output, otherwise or when Odoo has no value.
+	Template        Many2One       `json:"product_tmpl_id,omitzero"`                     // the product.template that groups sibling variants
+	DisplayName     string         `json:"display_name,omitempty"`                       // "[SKU] Name (value, value)", Odoo's variant label
+	PriceExtra      float64        `json:"price_extra,omitempty"`                        // variant price extra; the sale price is ListPrice + PriceExtra
+	ValueIDs        []int          `json:"product_template_variant_value_ids,omitempty"` // IDs for ProductAttributeValues
+	Barcode         OptionalString `json:"barcode,omitempty"`                            // EAN/UPC barcode; not unique across variants
+	DescriptionSale OptionalString `json:"description_sale,omitempty"`                   // sales description shown on quotations
+	Weight          float64        `json:"weight,omitempty"`                             // in the database's weight unit
+	Volume          float64        `json:"volume,omitempty"`                             // in the database's volume unit
+	UoM             Many2One       `json:"uom_id,omitzero"`                              // unit of measure
+	TaxIDs          []int          `json:"taxes_id,omitempty"`                           // customer tax IDs (account.tax)
+	Type            string         `json:"type,omitempty"`                               // "consu", "service" or "combo"
+	WriteDate       OptionalString `json:"write_date,omitempty"`                         // last change, "YYYY-MM-DD HH:MM:SS" in UTC
+
+	// Extra holds the raw JSON of ProductQuery.ExtraFields, by field name. Decode a value with
+	// ExtraValue. It is nil when no extra field was requested.
+	Extra map[string]json.RawMessage `json:"extra,omitempty"`
 }
+
+// ExtraValue decodes the extra field name into a value of type T. It reports false when the field
+// was not requested or does not decode into T. Odoo sends false for an unset text or relation
+// field, so use OptionalString or Many2One for those.
+func ExtraValue[T any](p Product, name string) (T, bool) {
+	var (
+		value T
+		raw   json.RawMessage
+		ok    bool
+	)
+
+	if raw, ok = p.Extra[name]; !ok {
+		return value, false
+	}
+	if json.Unmarshal(raw, &value) != nil {
+		var zero T
+		return zero, false
+	}
+	return value, true
+}
+
+var (
+	baseProductFields = []string{"id", "name", "default_code", "list_price", "categ_id", "sale_ok", "is_storable"}
+	// detailProductFields are the extra fields requested when ProductQuery.Details is set.
+	detailProductFields = []string{
+		"barcode", "description_sale", "weight", "volume", "uom_id", "taxes_id", "type",
+		"write_date", "product_tmpl_id", "display_name", "price_extra", "product_template_variant_value_ids",
+	}
+)
 
 // ProductQuery filters and paginates products. Limit defaults to 100 and
 // Order to "id". Domain is an Odoo domain; nil matches every visible product.
@@ -30,6 +79,14 @@ type ProductQuery struct {
 	Limit  int    // maximum records per call; zero means 100
 	Offset int    // records to skip; zero means none
 	Order  string // Odoo order clause such as "name asc"; empty means "id"
+
+	// Details also requests the fields documented as "filled only when Details is set" on Product.
+	// It is off by default, so a query asks for the base fields only.
+	Details bool
+	// ExtraFields names more product.product fields, for example custom or module fields such as a
+	// brand. Their raw values land in Product.Extra. Names that Product already carries (base or,
+	// with Details, detail fields) are requested once and are not repeated in Extra.
+	ExtraFields []string
 }
 
 // SearchProducts returns product.product records matching the query.
@@ -38,6 +95,9 @@ func (c *Client) SearchProducts(ctx context.Context, query ProductQuery) ([]Prod
 		err      error
 		domain   []any
 		products []Product
+		fields   []string
+		extra    []string
+		params   map[string]any
 	)
 
 	if query.Limit < 0 || query.Offset < 0 {
@@ -53,18 +113,88 @@ func (c *Client) SearchProducts(ctx context.Context, query ProductQuery) ([]Prod
 	if domain == nil {
 		domain = []any{}
 	}
-	products = make([]Product, 0)
-	err = c.CallRead(ctx, "product.product", "search_read", map[string]any{
+	if fields, extra, err = productFields(query); err != nil {
+		return nil, err
+	}
+	params = map[string]any{
 		"domain": domain,
-		"fields": []string{"id", "name", "default_code", "list_price", "categ_id", "sale_ok", "is_storable"},
+		"fields": fields,
 		"limit":  query.Limit,
 		"offset": query.Offset,
 		"order":  query.Order,
-	}, &products)
+	}
+	products = make([]Product, 0)
+	if len(extra) == 0 {
+		err = c.CallRead(ctx, "product.product", "search_read", params, &products)
+	} else {
+		err = c.readProductsWithExtra(ctx, params, extra, &products)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("search products: %w", err)
 	}
 	return products, nil
+}
+
+// productFields returns the field names to request and, apart from them, the ones that belong in
+// Product.Extra. It rejects an empty extra field name.
+func productFields(query ProductQuery) (fields, extra []string, err error) {
+	var (
+		seen = make(map[string]bool)
+		name string
+	)
+
+	fields = append(fields, baseProductFields...)
+	if query.Details {
+		fields = append(fields, detailProductFields...)
+	}
+	for _, name = range fields {
+		seen[name] = true
+	}
+	for _, name = range query.ExtraFields {
+		if name == "" {
+			return nil, nil, invalidArgument("extra field name must not be empty")
+		}
+		if seen[name] {
+			continue
+		}
+		seen[name] = true
+		fields = append(fields, name)
+		extra = append(extra, name)
+	}
+	return fields, extra, nil
+}
+
+// readProductsWithExtra reads the records once as raw JSON, decodes each into a Product and keeps
+// the values of the extra fields in Product.Extra.
+func (c *Client) readProductsWithExtra(ctx context.Context, params map[string]any, extra []string, out *[]Product) error {
+	var (
+		raws   []json.RawMessage
+		fields map[string]json.RawMessage
+		raw    json.RawMessage
+		p      Product
+		name   string
+		err    error
+	)
+
+	if err = c.CallRead(ctx, "product.product", "search_read", params, &raws); err != nil {
+		return err
+	}
+	for _, raw = range raws {
+		p = Product{}
+		if err = json.Unmarshal(raw, &p); err != nil {
+			return fmt.Errorf("decode product: %w", err)
+		}
+		fields = nil
+		if err = json.Unmarshal(raw, &fields); err != nil {
+			return fmt.Errorf("decode product fields: %w", err)
+		}
+		p.Extra = make(map[string]json.RawMessage, len(extra))
+		for _, name = range extra {
+			p.Extra[name] = fields[name]
+		}
+		*out = append(*out, p)
+	}
+	return nil
 }
 
 // GetProduct retrieves one product by ID.

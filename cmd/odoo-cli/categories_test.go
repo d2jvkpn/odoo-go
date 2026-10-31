@@ -74,7 +74,7 @@ func TestCategoryCommandQueries(t *testing.T) {
 				}
 
 				if tc.model == "product.category" {
-					assert.Equal(t, []any{"id", "name", "complete_name", "parent_id"}, params["fields"])
+					assert.Equal(t, []any{"id", "name", "complete_name", "parent_id", "child_id", "parent_path"}, params["fields"])
 					fmt.Fprint(w, `[{"id":2,"name":"Desks","complete_name":"Furniture / Desks","parent_id":false}]`)
 				} else {
 					fmt.Fprint(w, `[{"id":2,"name":"Desks","display_name":"Desks","parent_id":false,"child_id":[]}]`)

@@ -48,6 +48,15 @@ go run ./cmd/odoo-cli products list -config configs/local.yaml -limit 10
 ```
 
 `products list` also accepts `-offset`, `-order` and `-domain` (default `[["sale_ok","=",true]]`).
+By default only those base fields are requested. `-details` (Go: `ProductQuery{Details: true}`) also
+fetches the barcode, sales description, weight, volume, unit of measure, tax IDs, type and
+write date. `-field NAME` (Go: `ExtraFields`) fetches any other `product.product` field, such as a
+custom `x_brand`, into the `extra` object; in Go read it with `odoo.ExtraValue[string](p, "x_brand")`.
+Variants of one template share `product_tmpl_id` (`Product.Template`); `Details` also returns
+`display_name`, `price_extra` and the variant's attribute value IDs (`ValueIDs`), and
+`client.ProductAttributeValues(ctx, ids)` turns those IDs into attribute names and values such as
+"Weight: 500g". Images are not supported yet.
+
 Count matching products, or fetch one by `product.product` ID (a missing product is an error):
 
 ```sh
@@ -263,8 +272,9 @@ go run ./cmd/odoo-cli categories create -file examples/category.json
 `-type`, and prints the new ID (see `examples/category.response.json`). Like other writes it is
 never retried; after a transport error, check Odoo before resubmitting.
 
-Backend categories request `id`, `name`, `complete_name` and `parent_id`; `complete_name` is the
-full path (for example "Furniture / Desks"). Storefront categories request `id`, `name`,
+Backend categories request `id`, `name`, `complete_name`, `parent_id`, `child_id` and
+`parent_path`; `complete_name` is the full path (for example "Furniture / Desks") and `parent_path`
+the ancestor ID path (for example `1/5/9/`). Storefront categories request `id`, `name`,
 `display_name`, `parent_id` and `child_id`; an empty child list is omitted from the output. The
 parent is still converted to a relation object such as `{"id":1,"name":"Furniture"}`.
 
@@ -422,7 +432,7 @@ listed here are not read, so use `CallRead` for anything else.
 | SDK type | Odoo model | Fields read |
 |----------|------------|-------------|
 | `Product` | `product.product` | `id`, `name`, `default_code`, `list_price`, `categ_id`, `sale_ok`, `is_storable` |
-| `ProductCategory` | `product.category` / `product.public.category` | `id`, `name`, `complete_name`, `display_name`, `parent_id`, `child_id` |
+| `ProductCategory` | `product.category` / `product.public.category` | `id`, `name`, `complete_name`, `display_name`, `parent_id`, `child_id`, `parent_path` |
 | `SaleOrder` | `sale.order` | `id`, `name`, `partner_id`, `date_order`, `state`, `amount_untaxed`, `amount_tax`, `amount_total`, `currency_id`, `client_order_ref`, `invoice_status`, `delivery_status`, `origin`, `note`, `order_line` |
 | `SaleOrderLine` | `sale.order.line` | `id`, `product_id`, `name`, `product_uom_qty`, `price_unit`, `price_subtotal`, `display_type` |
 | `Partner` | `res.partner` | `id`, `name`, `email`, `phone`, `ref`, `street`, `city`, `zip`, `country_id` |

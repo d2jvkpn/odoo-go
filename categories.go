@@ -16,15 +16,18 @@ const (
 	WebsiteCategory CategoryType = "website"
 )
 
-// ProductCategory exposes category hierarchy fields. Internal categories use
-// CompleteName; website categories use DisplayName and ChildIDs.
+// ProductCategory exposes category hierarchy fields. Internal categories use CompleteName and
+// ParentPath; website categories use DisplayName.
 type ProductCategory struct {
 	ID           int      `json:"id"`
 	Name         string   `json:"name"`                    // the category's own name
 	CompleteName string   `json:"complete_name,omitempty"` // full path, internal categories only
 	DisplayName  string   `json:"display_name,omitempty"`  // full path, website categories only
 	Parent       Many2One `json:"parent_id"`               // zero ID for a root category
-	ChildIDs     []int    `json:"child_id,omitempty"`      // direct children, website categories only
+	ChildIDs     []int    `json:"child_id,omitempty"`      // direct children
+	// ParentPath is the ancestor ID path such as "1/5/9/" (the category's own ID last); internal
+	// categories only. A category and all its descendants share the path prefix.
+	ParentPath OptionalString `json:"parent_path,omitempty"`
 }
 
 // ProductCategoryQuery filters and paginates categories. Type defaults to
@@ -75,7 +78,7 @@ func (c *Client) SearchProductCategories(
 	if query.Limit < 0 || query.Offset < 0 {
 		return nil, invalidArgument("limit and offset must not be negative")
 	}
-	fields = []string{"id", "name", "complete_name", "parent_id"}
+	fields = []string{"id", "name", "complete_name", "parent_id", "child_id", "parent_path"}
 	defaultLimit = 1000
 	if query.Type == WebsiteCategory {
 		fields = []string{"id", "name", "display_name", "parent_id", "child_id"}

@@ -13,7 +13,7 @@ import (
 )
 
 const productsUsage = `Usage:
-  odoo products list [-config configs/local.yaml] [-limit 100] [-offset 0] [-order id]
+  odoo products list [-config configs/local.yaml] [-limit 100] [-offset 0] [-order id] [-details] [-field NAME]...
                      [-domain '[["sale_ok","=",true]]'] [-all]
   odoo products count [-domain '[["sale_ok","=",true]]'] [-config configs/local.yaml]
   odoo products get -id ID [-config configs/local.yaml]
@@ -64,6 +64,11 @@ func runProducts(ctx context.Context, args []string, out io.Writer) error {
 		flags.StringVar(&opts.Query.Order, "order", "id", "Odoo sort expression")
 		flags.StringVar(&domain, "domain", saleableDomain, "Odoo domain as a JSON array")
 		flags.BoolVar(&opts.All, "all", false, "fetch every page")
+		flags.BoolVar(&opts.Query.Details, "details", false, "also fetch barcode, description, weight, volume, UoM, taxes, type, write date")
+		flags.Func("field", "extra product.product field to fetch into \"extra\" (repeatable)", func(v string) error {
+			opts.Query.ExtraFields = append(opts.Query.ExtraFields, v)
+			return nil
+		})
 	case "count":
 		flags.StringVar(&domain, "domain", saleableDomain, "Odoo domain as a JSON array")
 	case "get":
