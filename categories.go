@@ -28,6 +28,8 @@ type ProductCategory struct {
 	// ParentPath is the ancestor ID path such as "1/5/9/" (the category's own ID last); internal
 	// categories only. A category and all its descendants share the path prefix.
 	ParentPath OptionalString `json:"parent_path,omitempty"`
+	// WriteDate is the last change, "YYYY-MM-DD HH:MM:SS" in UTC; empty when Odoo has none.
+	WriteDate OptionalString `json:"write_date,omitempty"`
 }
 
 // ProductCategoryQuery filters and paginates categories. Type defaults to
@@ -78,10 +80,10 @@ func (c *Client) SearchProductCategories(
 	if query.Limit < 0 || query.Offset < 0 {
 		return nil, invalidArgument("limit and offset must not be negative")
 	}
-	fields = []string{"id", "name", "complete_name", "parent_id", "child_id", "parent_path"}
+	fields = []string{"id", "name", "complete_name", "parent_id", "child_id", "parent_path", "write_date"}
 	defaultLimit = 1000
 	if query.Type == WebsiteCategory {
-		fields = []string{"id", "name", "display_name", "parent_id", "child_id"}
+		fields = []string{"id", "name", "display_name", "parent_id", "child_id", "write_date"}
 		defaultLimit = 100
 	}
 	if query.Limit == 0 {

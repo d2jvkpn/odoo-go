@@ -30,16 +30,16 @@ func TestSearchProductCategories(t *testing.T) {
 				assert.Equal(t, "/json/2/"+tc.model+"/search_read", r.URL.Path)
 				if tc.kind == WebsiteCategory {
 					assertJSON(t, requestParams(t, r), `{"domain":[["name","ilike","Desk"]],`+
-						`"fields":["id","name","display_name","parent_id","child_id"],`+
+						`"fields":["id","name","display_name","parent_id","child_id","write_date"],`+
 						`"limit":5,"offset":10,"order":"id desc"}`)
 					fmt.Fprint(w, `[{"id":2,"name":"Desks","display_name":"Furniture / Desks",`+
 						`"parent_id":[1,"Furniture"],"child_id":[3,4]}]`)
 				} else {
 					assertJSON(t, requestParams(t, r), `{"domain":[["name","ilike","Desk"]],`+
-						`"fields":["id","name","complete_name","parent_id","child_id","parent_path"],`+
+						`"fields":["id","name","complete_name","parent_id","child_id","parent_path","write_date"],`+
 						`"limit":5,"offset":10,"order":"id desc"}`)
 					fmt.Fprint(w, `[{"id":2,"name":"Desks","complete_name":"Furniture / Desks",`+
-						`"parent_id":[1,"Furniture"]}]`)
+						`"parent_id":[1,"Furniture"],"parent_path":"1/2/","write_date":"2026-08-20 17:10:38"}]`)
 				}
 			})
 
@@ -60,7 +60,7 @@ func TestSearchProductCategories(t *testing.T) {
 				assert.Equal(t, "Furniture / Desks", categories[0].DisplayName)
 			} else {
 				assertJSON(t, categories[0], `{"id":2,"name":"Desks","complete_name":"Furniture / Desks",`+
-					`"parent_id":{"id":1,"name":"Furniture"}}`)
+					`"parent_id":{"id":1,"name":"Furniture"},"parent_path":"1/2/","write_date":"2026-08-20 17:10:38"}`)
 			}
 		})
 	}
@@ -126,7 +126,7 @@ func TestCategoryEmptySearch(t *testing.T) {
 
 		params = requestParams(t, r)
 		assertJSON(t, params["domain"], "[]")
-		assertJSON(t, params["fields"], `["id","name","complete_name","parent_id","child_id","parent_path"]`)
+		assertJSON(t, params["fields"], `["id","name","complete_name","parent_id","child_id","parent_path","write_date"]`)
 		assert.Equal(t, float64(1000), params["limit"])
 		fmt.Fprint(w, "[]")
 	})
@@ -163,7 +163,7 @@ func TestGetInternalCategoryCompleteName(t *testing.T) {
 		var params map[string]any
 
 		params = requestParams(t, r)
-		assertJSON(t, params["fields"], `["id","name","complete_name","parent_id","child_id","parent_path"]`)
+		assertJSON(t, params["fields"], `["id","name","complete_name","parent_id","child_id","parent_path","write_date"]`)
 		assertJSON(t, params["domain"], `[["id","=",2]]`)
 		assert.Equal(t, float64(1), params["limit"])
 		fmt.Fprint(w, `[{"id":2,"name":"Desks","complete_name":"Furniture / Desks","parent_id":[1,"Furniture"]}]`)
