@@ -431,6 +431,39 @@ Or set `odoo.max_retries` (0 to 10) in the YAML configuration, which also applie
 - Use `CallRead` for your own read-only model methods (`search_read`, `read`). Never use it for
   methods with side effects.
 
+## Helpdesk tickets
+
+The OCA `helpdesk` addon adds `helpdesk.ticket`, linked to sales orders through the many2many
+`sale_order_ids` field. The `oca/helpdesk` subpackage supplements `*odoo.Client` with typed
+ticket reads and writes; import it as `github.com/d2jvkpn/odoo-go/oca/helpdesk`.
+
+```go
+import "github.com/d2jvkpn/odoo-go/oca/helpdesk"
+
+c := helpdesk.NewClient(odooClient) // odooClient is *odoo.Client
+
+tickets, err := c.SearchTickets(ctx, helpdesk.TicketQuery{})
+t, err := c.GetTicket(ctx, 101)
+id, err := c.CreateTicket(ctx, helpdesk.CreateTicketRequest{
+    Name: "Broken pump", Description: "<p>leaks</p>",
+    PartnerID: 15, SaleOrderIDs: helpdesk.ReplaceIDs{42},
+})
+stage := 4
+err = c.UpdateTicket(ctx, 101, helpdesk.UpdateTicketRequest{StageID: &stage})
+stages, err := c.ListTicketStages(ctx)
+
+// Chatter: read the ticket's thread, and post a customer-visible comment or an internal note.
+msgs, err := c.ListTicketMessages(ctx, 101)
+err = c.PostTicketMessage(ctx, 101, "<p>shipped</p>", false) // mail.mt_comment
+err = c.PostTicketMessage(ctx, 101, "escalate to tier 2", true) // mail.mt_note (internal)
+```
+
+`CreateTicket`, `UpdateTicket` and `PostTicketMessage` are never retried, matching the root write
+rule; after a transport error the write outcome may be unknown. Ticket create/write require `name`
+and `description` (create) and reject negative relation IDs and priorities outside `0`–`3`. Both
+customer and agent messages live in the same `message_ids` thread; the subtype decides visibility
+(`mail.mt_comment` is customer-visible, `mail.mt_note` is internal-only).
+
 ## Field mapping and Odoo reference
 
 The SDK returns a fixed subset of Odoo fields; JSON names are the Odoo field names. Fields not
@@ -447,6 +480,11 @@ listed here are not read, so use `CallRead` for anything else.
 | `Country` | `res.country` | `id`, `name`, `code` |
 | `ProductStock` | `product.product` | `id`, `qty_available`, `virtual_available`, `free_qty` |
 | `StockLocation` | `stock.location` | `id`, `complete_name` |
+| `helpdesk.Ticket` | `helpdesk.ticket` | `id`, `name`, `number`, `description`, `partner_id`, `sale_order_ids`, `stage_id`, `team_id`, `user_id`, `priority`, `channel_id`, `category_id`, `tag_ids`, `product_id`, `closed`, `message_ids`, `create_date`, `write_date` |
+| `helpdesk.TicketMessage` | `mail.message` | `id`, `body`, `subject`, `message_type`, `subtype_id`, `author_id`, `email_from`, `date`, `parent_id` |
+| `helpdesk.TicketStage` | `helpdesk.ticket.stage` | `id`, `name`, `sequence`, `closed`, `fold` |
+| `helpdesk.TicketTeam` | `helpdesk.ticket.team` | `id`, `name` |
+| `helpdesk.TicketChannel` | `helpdesk.ticket.channel` | `id`, `name` |
 
 The SDK does not duplicate Odoo's own documentation. For the protocol (authentication, request
 format, error codes) see the

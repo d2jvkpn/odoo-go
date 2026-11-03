@@ -11,6 +11,8 @@ typed client (products, product categories, sales orders) and the `odoo-cli` com
   category queries, and relation decoding.
 - `cmd/odoo-cli/`: unified `products`, `orders`, and `categories` subcommands. Keep argument parsing
   and output here; reusable API behavior belongs in the root `odoo` package.
+- `oca/helpdesk/`: OCA helpdesk ticket operations (search, get, count, create, update, stages,
+  teams, channels, messages), supplementing the root `odoo` package.
 - Tests live beside implementation files as `*_test.go`.
 - `examples/`: sample request files (`product.json`, `sale-order.json`) and the matching CLI output
   (`*.response.json`); `README.md`: usage documentation.

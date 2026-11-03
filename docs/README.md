@@ -10,6 +10,11 @@
   `ListPartnerTags`, `SetProductStock`, the `Update*`/`SetProductActive` writes,
   `UpsertPartnerByRef`, and `ConfirmSaleOrder`/`CancelSaleOrder`. Writes share the helpers in
   `write.go`; there is no exported generic write or delete, and only products can be archived.
+- `oca/helpdesk` supplements the root package with OCA helpdesk ticket reads and writes
+  (`helpdesk.ticket`, `helpdesk.ticket.stage`, `helpdesk.ticket.team`, `helpdesk.ticket.channel`,
+  `mail.message`); it wraps `*odoo.Client` via `NewClient`. Ticket create/write and message posts
+  are never retried, matching the root write rule. Customer and agent messages share one
+  `message_ids` thread; the `mail.mt_comment`/`mail.mt_note` subtype decides customer visibility.
 - `cmd/odoo-cli` only parses arguments and prints JSON; reusable API behavior belongs in the root
   package.
 - `UpsertPartnerByRef` is not safe under concurrent calls for the same ref; the SDK deliberately
