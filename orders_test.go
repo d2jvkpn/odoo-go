@@ -70,7 +70,7 @@ func TestSearchSaleOrders(t *testing.T) {
 		assert.Equal(t, "/json/2/sale.order/search_read", r.URL.Path)
 		assertJSON(t, requestParams(t, r), `{"domain":[["partner_id","=",7],["state","=","sale"]],`+
 			`"limit":5,"offset":10,"order":"id desc","fields":["id","name","partner_id","date_order","state",`+
-			`"amount_untaxed","amount_tax","amount_total","currency_id","client_order_ref","invoice_status","delivery_status","origin","note","order_line"]}`)
+			`"amount_untaxed","amount_tax","amount_total","currency_id","client_order_ref","invoice_status","delivery_status","origin","note","order_line","partner_shipping_id","partner_invoice_id"]}`)
 		fmt.Fprint(w, orderFixture)
 	})
 
@@ -203,7 +203,7 @@ func TestCreateSaleOrder(t *testing.T) {
 		calls++
 		assert.Equal(t, "/json/2/sale.order/create", r.URL.Path)
 		assertJSON(t, requestParams(t, r), `{"vals_list":[{"partner_id":7,"pricelist_id":2,`+
-			`"client_order_ref":"web-123","origin":"web","note":"<p>Leave at door</p>","order_line":[[0,0,{"product_id":3,"product_uom_qty":2}],`+
+			`"partner_shipping_id":8,"partner_invoice_id":9,"client_order_ref":"web-123","origin":"web","note":"<p>Leave at door</p>","order_line":[[0,0,{"product_id":3,"product_uom_qty":2}],`+
 			`[0,0,{"product_id":4,"product_uom_qty":1,"price_unit":0}],`+
 			`[0,0,{"product_id":5,"product_uom_qty":1.5,"price_unit":12.5}]]}]}`)
 		fmt.Fprint(w, "[42]")
@@ -211,11 +211,13 @@ func TestCreateSaleOrder(t *testing.T) {
 
 	zero, price = 0.0, 12.5
 	id, err = client.CreateSaleOrder(context.Background(), CreateSaleOrderRequest{
-		PartnerID:      7,
-		PricelistID:    2,
-		ClientOrderRef: "web-123",
-		Origin:         "web",
-		Note:           "<p>Leave at door</p>",
+		PartnerID:         7,
+		PricelistID:       2,
+		PartnerShippingID: 8,
+		PartnerInvoiceID:  9,
+		ClientOrderRef:    "web-123",
+		Origin:            "web",
+		Note:              "<p>Leave at door</p>",
 		Lines: []CreateSaleOrderLine{
 			{ProductID: 3, Quantity: 2},
 			{ProductID: 4, Quantity: 1, UnitPrice: &zero},
@@ -417,4 +419,14 @@ func TestOptionalStringDecoding(t *testing.T) {
 		err = json.Unmarshal([]byte(raw), &value)
 		assert.Error(t, err, "accepted %s", raw)
 	}
+}
+
+func TestCreateSaleOrderRejectsNegativeAddressIDs(t *testing.T) {
+	client := orderTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("request must not be sent")
+	})
+	_, err := client.CreateSaleOrder(context.Background(), CreateSaleOrderRequest{
+		PartnerID: 7, PartnerShippingID: -1, Lines: []CreateSaleOrderLine{{ProductID: 3, Quantity: 1}},
+	})
+	assert.ErrorIs(t, err, ErrInvalidArgument)
 }

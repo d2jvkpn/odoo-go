@@ -47,7 +47,8 @@ func TestExampleResponseFilesMatchCLIOutput(t *testing.T) {
 		case strings.HasSuffix(r.URL.Path, "sale.order/search_read"):
 			fmt.Fprint(w, `[{"id":42,"name":"S00042","partner_id":[15,"Azure Interior"],`+
 				`"date_order":"2026-10-27 10:00:00","state":"draft","amount_untaxed":150,"amount_tax":15,`+
-				`"amount_total":165,"currency_id":[1,"USD"],"client_order_ref":"WX202610270001","invoice_status":"no","delivery_status":"pending","origin":"web","note":"<p>Leave at door</p>","order_line":[11,12]}]`)
+				`"amount_total":165,"currency_id":[1,"USD"],"client_order_ref":"WX202610270001","invoice_status":"no","delivery_status":"pending","origin":"web","note":"<p>Leave at door</p>","order_line":[11,12],`+
+				`"partner_shipping_id":[16,"Azure Interior, Delivery"],"partner_invoice_id":[15,"Azure Interior"]}]`)
 		case strings.HasSuffix(r.URL.Path, "sale.order.line/read"):
 			fmt.Fprint(w, `[{"id":11,"product_id":[101,"Green Tea 100g"],"name":"Green Tea 100g",`+
 				`"product_uom_qty":2,"price_unit":25,"price_subtotal":50,"display_type":false},`+

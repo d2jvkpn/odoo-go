@@ -382,3 +382,11 @@ func (c *Client) UpsertPartnerByRef(
 		return 0, false, fmt.Errorf("%w: %q", ErrAmbiguousPartner, ref)
 	}
 }
+
+// SetPartnerActive archives (false) or restores (true) a partner. Archived partners stay referenced by
+// existing orders. Archiving a company also archives its child contacts. It does not retry.
+func (c *Client) SetPartnerActive(ctx context.Context, id int, active bool) error {
+	return c.updateRecord(ctx, "res.partner", id, struct {
+		Active bool `json:"active"`
+	}{active}, ErrPartnerNotFound)
+}

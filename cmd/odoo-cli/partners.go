@@ -15,11 +15,13 @@ const partnersUsage = `Usage:
   odoo partners get -id ID [-config configs/local.yaml]
   odoo partners create -file partner.json [-config configs/local.yaml]
   odoo partners update -id ID -file patch.json [-config configs/local.yaml]
+  odoo partners archive|unarchive -id ID [-config configs/local.yaml]
   odoo partners upsert -ref REF -file partner.json [-config configs/local.yaml]
   odoo partners tags [-config configs/local.yaml]
 
 upsert matches an active partner by ref and updates it, or creates one. Concurrent upserts for the
-same ref may create duplicates; serialize them per ref. tags prints every partner tag as
+same ref may create duplicates; list hides archived partners unless the domain names active, e.g.
+[["active","in",[true,false]]]; serialize them per ref. tags prints every partner tag as
 {id, name, display_name}; use the ids in category_id.
 `
 
@@ -53,7 +55,7 @@ func runPartners(ctx context.Context, args []string, out io.Writer) error {
 		flags.StringVar(&query.Order, "order", "id", "Odoo sort expression")
 		flags.StringVar(&domain, "domain", "[]", "Odoo domain as a JSON array")
 	case "tags":
-	case "get":
+	case "get", "archive", "unarchive":
 		flags.IntVar(&id, "id", 0, "partner ID")
 	case "create":
 		flags.StringVar(&file, "file", "", "JSON file containing the partner")
@@ -88,7 +90,7 @@ func runPartners(ctx context.Context, args []string, out io.Writer) error {
 		if query.Domain, err = parseDomain(domain); err != nil {
 			return err
 		}
-	case "get", "update":
+	case "get", "update", "archive", "unarchive":
 		if id <= 0 {
 			return fmt.Errorf("id must be positive")
 		}
@@ -123,6 +125,12 @@ func runPartners(ctx context.Context, args []string, out io.Writer) error {
 		result = struct {
 			ID int `json:"id"`
 		}{created}
+	case "archive", "unarchive":
+		err = client.SetPartnerActive(ctx, id, action == "unarchive")
+		result = struct {
+			ID     int  `json:"id"`
+			Active bool `json:"active"`
+		}{id, action == "unarchive"}
 	case "update":
 		err = client.UpdatePartner(ctx, id, patch)
 		result = struct {

@@ -95,3 +95,11 @@ func TestUpdateProductCategory(t *testing.T) {
 	err = client.UpdateProductCategory(context.Background(), "bad", 3, UpdateProductCategoryRequest{Name: &name})
 	assert.ErrorIs(t, err, ErrInvalidArgument)
 }
+
+func TestSetPartnerActive(t *testing.T) {
+	var writes []map[string]any
+
+	client := orderTestClient(t, recordingHandler(t, "res.partner", &writes))
+	require.NoError(t, client.SetPartnerActive(context.Background(), 31, false))
+	assertJSON(t, writes[0], `{"ids":[31],"vals":{"active":false}}`)
+}

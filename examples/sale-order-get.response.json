@@ -45,5 +45,13 @@
       "price_subtotal": 100,
       "display_type": ""
     }
-  ]
+  ],
+  "partner_shipping_id": {
+    "id": 16,
+    "name": "Azure Interior, Delivery"
+  },
+  "partner_invoice_id": {
+    "id": 15,
+    "name": "Azure Interior"
+  }
 }

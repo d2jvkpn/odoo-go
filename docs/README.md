@@ -7,9 +7,10 @@
   helpers (`SearchProducts`, `SearchProductCategories`, `SearchSaleOrders`, `SearchPartners`,
   `CreateSaleOrder`, `CreateProduct`, `CreateProductCategory`, `CreatePartner`, and their `Get*`
   counterparts) are built on it, plus `GetProductStock`, `ListStockLocations`, `ListCountries`,
-  `ListPartnerTags`, `SetProductStock`, the `Update*`/`SetProductActive` writes,
+  `ListPartnerTags`, `SetProductStock`, the `Update*`/`SetProductActive`/`SetPartnerActive` writes,
   `UpsertPartnerByRef`, and `ConfirmSaleOrder`/`CancelSaleOrder`. Writes share the helpers in
-  `write.go`; there is no exported generic write or delete, and only products can be archived.
+  `write.go`; there is no exported generic write or delete, and only products and partners can be
+  archived.
 - `oca/helpdesk` wraps `*odoo.Client` with OCA core ticket lifecycle, metadata, attachment,
   message, follower and activity operations. Its typed delete methods are explicit and never
   retried. The `helpdesk` CLI exposes these operations. Core ticket reads work without the

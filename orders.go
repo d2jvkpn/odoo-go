@@ -36,6 +36,10 @@ type SaleOrder struct {
 	Note           OptionalString  `json:"note"`            // terms and conditions, HTML, e.g. "<p>Delivery within 3 days</p>"
 	LineIDs        []int           `json:"order_line"`      // line IDs; always present
 	Lines          []SaleOrderLine `json:"lines,omitempty"` // filled only by GetSaleOrder
+	// ShippingAddress and InvoiceAddress reference res.partner records (often child contacts of
+	// Partner). They are references, not snapshots: editing that partner changes the order's address.
+	ShippingAddress Many2One `json:"partner_shipping_id"`
+	InvoiceAddress  Many2One `json:"partner_invoice_id"`
 }
 
 // SaleOrderLine may represent a product, a section or a note.
@@ -84,7 +88,7 @@ func (c *Client) SearchSaleOrders(ctx context.Context, query SaleOrderQuery) ([]
 		"fields": []string{
 			"id", "name", "partner_id", "date_order", "state", "amount_untaxed", "amount_tax",
 			"amount_total", "currency_id", "client_order_ref", "invoice_status", "delivery_status",
-			"origin", "note", "order_line",
+			"origin", "note", "order_line", "partner_shipping_id", "partner_invoice_id",
 		},
 		"limit":  query.Limit,
 		"offset": query.Offset,
@@ -141,12 +145,16 @@ func (c *Client) GetSaleOrder(ctx context.Context, id int) (*SaleOrder, error) {
 //
 // Required: PartnerID (> 0) and at least one line. All other fields are optional.
 type CreateSaleOrderRequest struct {
-	PartnerID      int                   `json:"partner_id"                 validate:"gt=0"` // required
-	PricelistID    int                   `json:"pricelist_id,omitempty"     validate:"gte=0"`
-	ClientOrderRef string                `json:"client_order_ref,omitempty"`                       // e.g. "web-1001"
-	Origin         string                `json:"origin,omitempty"`                                 // e.g. "web"
-	Note           string                `json:"note,omitempty"`                                   // HTML, e.g. "<p>Delivery within 3 days</p>"
-	Lines          []CreateSaleOrderLine `json:"lines"                      validate:"min=1,dive"` // required
+	PartnerID   int `json:"partner_id"                 validate:"gt=0"` // required
+	PricelistID int `json:"pricelist_id,omitempty"     validate:"gte=0"`
+	// PartnerShippingID and PartnerInvoiceID are optional res.partner IDs (typically child contacts of
+	// PartnerID with type delivery/invoice); when zero Odoo derives them from PartnerID.
+	PartnerShippingID int                   `json:"partner_shipping_id,omitempty" validate:"gte=0"`
+	PartnerInvoiceID  int                   `json:"partner_invoice_id,omitempty"  validate:"gte=0"`
+	ClientOrderRef    string                `json:"client_order_ref,omitempty"`                       // e.g. "web-1001"
+	Origin            string                `json:"origin,omitempty"`                                 // e.g. "web"
+	Note              string                `json:"note,omitempty"`                                   // HTML, e.g. "<p>Delivery within 3 days</p>"
+	Lines             []CreateSaleOrderLine `json:"lines"                      validate:"min=1,dive"` // required
 }
 
 // CreateSaleOrderLine references a product.product variant. Quantity uses the
@@ -243,6 +251,12 @@ func (c *Client) CreateSaleOrder(ctx context.Context, input CreateSaleOrderReque
 	values = map[string]any{"partner_id": input.PartnerID, "order_line": lines}
 	if input.PricelistID != 0 {
 		values["pricelist_id"] = input.PricelistID
+	}
+	if input.PartnerShippingID != 0 {
+		values["partner_shipping_id"] = input.PartnerShippingID
+	}
+	if input.PartnerInvoiceID != 0 {
+		values["partner_invoice_id"] = input.PartnerInvoiceID
 	}
 	if input.ClientOrderRef != "" {
 		values["client_order_ref"] = input.ClientOrderRef

@@ -110,7 +110,7 @@ go run ./cmd/odoo-cli orders create -file examples/sale-order.json
 
 This writes one **draft quotation** and its lines to the configured database and prints a result
 such as [examples/sale-order.response.json](examples/sale-order.response.json); `orders get -id 42`
-prints [examples/sale-order-get.response.json](examples/sale-order-get.response.json). It never confirms the order, ships goods or invoices. The customer field maps
+prints [examples/sale-order-get.response.json](examples/sale-order-get.response.json). Optional `partner_shipping_id` and `partner_invoice_id` reference partners (typically `type` delivery/invoice child contacts created with `partners create` and `parent_id`); orders keep a reference, not a snapshot, so create a new child contact instead of editing one when an address changes. It never confirms the order, ships goods or invoices. The customer field maps
 to `res.partner` and the product field to `product.product` (the variant, not the product
 template ID).
 
@@ -186,6 +186,7 @@ id, err := client.CreateSaleOrder(ctx, odoo.CreateSaleOrderRequest{
 go run ./cmd/odoo-cli partners list -limit 5
 go run ./cmd/odoo-cli partners get -id 15
 go run ./cmd/odoo-cli partners upsert -ref web-1001 -file examples/partner.json
+go run ./cmd/odoo-cli partners archive -id 16     # unarchive restores it; list needs an active-aware domain to show archived
 go run ./cmd/odoo-cli partners tags    # id and name of partner tags; use the ids in category_id
 go run ./cmd/odoo-cli countries list   # id, name and ISO code; use the id as country_id
 go run ./cmd/odoo-cli stock get -ids 21,22
@@ -232,7 +233,7 @@ go run ./cmd/odoo-cli categories update -id 7 -file patch.json
 - `orders update` changes only `client_order_ref`, `origin` and `note`; a pointer to `""` clears one.
   Odoo may refuse the change on a locked order, which surfaces as an `*HTTPError`.
 - Updates take a patch with only the fields to change (`products update`, `categories update`,
-  `partners update`, `orders update`); an empty patch or an unknown ID is an error. Only products can be archived.
+  `partners update`, `orders update`); an empty patch or an unknown ID is an error. Only products and partners can be archived.
 
 ```go
 id, created, err := client.UpsertPartnerByRef(ctx, "web-1001", odoo.CreatePartnerRequest{Name: "Ann"})
