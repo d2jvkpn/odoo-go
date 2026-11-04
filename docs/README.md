@@ -9,8 +9,9 @@
   counterparts) are built on it, plus `GetProductStock`, `ListStockLocations`, `ListCountries`,
   `ListPartnerTags`, `SetProductStock`, the `Update*`/`SetProductActive`/`SetPartnerActive` writes,
   `UpsertPartnerByRef`, `ConfirmSaleOrder`/`CancelSaleOrder`, and the variant helpers in
-  `variants.go` (`AddProductVariants` and the attribute, value and line creators). Writes share
-  the helpers in `write.go`; there is no exported generic write or delete, and only products and
+  `variants.go` (`AddProductVariants` and the attribute, value and line creators), and the
+  read-only `OrderPickings`/`OrderInvoices`/`OrderPayments` in `fulfillment.go`. Writes share the
+  helpers in `write.go`; there is no exported generic write or delete, and only products and
   partners can be archived.
 - `oca/helpdesk` wraps `*odoo.Client` with OCA core ticket lifecycle, metadata, attachment,
   message, follower and activity operations. Its typed delete methods are explicit and never

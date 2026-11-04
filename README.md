@@ -210,6 +210,29 @@ id, err := client.CreateSaleOrder(ctx, odoo.CreateSaleOrderRequest{
 // Handle err, then use id. Creation is never retried automatically.
 ```
 
+## Deliveries, invoices and payments
+
+Read-only views of what happened to an order after it was confirmed. They need `stock` and
+`sale_stock` (deliveries) and `account` (invoices and payments); an order without any of them returns
+`[]`, and an unknown order ID fails with "sales order not found".
+
+```sh
+go run ./cmd/odoo-cli orders pickings -id 26
+go run ./cmd/odoo-cli orders invoices -id 29
+go run ./cmd/odoo-cli orders payments -id 29
+```
+
+- `pickings` lists the order's deliveries (`stock.picking`: reference, `state`, scheduled and done
+  dates, from and to locations), each with its product `moves` (`product_uom_qty` is the demand,
+  `quantity` what is reserved or, once done, delivered).
+- `invoices` lists customer invoices and credit notes (`state`, `payment_state`, amounts and
+  `amount_residual`, the part still unpaid), drafts included. A draft has an empty `name` and dates.
+- `payments` lists payments reconciled with those invoices. A payment not yet reconciled with an
+  invoice is not linked to the order and is not shown.
+
+In Go: `OrderPickings`, `OrderInvoices` and `OrderPayments`. The SDK does not validate deliveries,
+create invoices or register payments; do those in Odoo.
+
 ## Customers, stock, and order transitions
 
 ```sh

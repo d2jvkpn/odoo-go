@@ -44,6 +44,8 @@ only lists, creates and updates them: it has no call that assigns a product to o
 | Internal categories | `product.category` | `product` |
 | Website categories | `product.public.category` | `website_sale` |
 | Orders | `sale.order`, `sale.order.line` | `sale`, `sale_stock` |
+| Order deliveries | `stock.picking`, `stock.move` | `stock`, `sale_stock` |
+| Order invoices and payments | `account.move`, `account.payment` | `account` |
 | Partners | `res.partner`, `res.partner.category`, `res.country` | `base` |
 | Stock | `stock.quant`, `stock.location`, `stock.inventory.conflict` | `stock` |
 | Helpdesk | `helpdesk.ticket` and related, `mail.*`, `ir.attachment` | `helpdesk_mgmt`, `mail` |

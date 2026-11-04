@@ -20,9 +20,12 @@ const ordersUsage = `Usage:
   odoo orders create -file order.json [-config configs/local.yaml]
   odoo orders update -id ID -file patch.json [-config configs/local.yaml]
   odoo orders confirm|cancel -id ID [-yes] [-config configs/local.yaml]
+  odoo orders pickings|invoices|payments -id ID [-config configs/local.yaml]
 
 create writes a draft quotation and its lines to the configured Odoo database.
 confirm and cancel change an existing order only with -yes; without it nothing is sent.
+pickings, invoices and payments only read the order's deliveries (with product moves), invoices and
+payments.
 `
 
 func runOrders(ctx context.Context, args []string, out io.Writer) error {
@@ -54,6 +57,9 @@ func runOrders(ctx context.Context, args []string, out io.Writer) error {
 	action = args[0]
 	if action == "update" {
 		return runOrderUpdate(ctx, args[1:], out)
+	}
+	if action == "pickings" || action == "invoices" || action == "payments" {
+		return runOrderFulfillment(ctx, action, args[1:], out)
 	}
 	if action == "confirm" || action == "cancel" {
 		return runOrderTransition(ctx, action, args[1:], out)
