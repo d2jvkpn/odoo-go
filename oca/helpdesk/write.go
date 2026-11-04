@@ -14,6 +14,9 @@ type CreateTicketRequest struct {
 	Name         string          `json:"name"`                     // required, not blank
 	Description  string          `json:"description"`              // required
 	PartnerID    int             `json:"partner_id,omitempty"`     // res.partner; >= 0
+	PartnerName  string          `json:"partner_name,omitempty"`   // contact name without a linked partner
+	PartnerEmail string          `json:"partner_email,omitempty"`  // contact email
+	CompanyID    int             `json:"company_id,omitempty"`     // res.company; >= 0
 	SaleOrderIDs odoo.ReplaceIDs `json:"sale_order_ids,omitempty"` // linked sale.order IDs
 	TeamID       int             `json:"team_id,omitempty"`        // >= 0
 	StageID      int             `json:"stage_id,omitempty"`       // >= 0
@@ -31,6 +34,9 @@ type UpdateTicketRequest struct {
 	Name         *string          `json:"name,omitempty"`
 	Description  *string          `json:"description,omitempty"`
 	PartnerID    *int             `json:"partner_id,omitempty"`
+	PartnerName  *string          `json:"partner_name,omitempty"`
+	PartnerEmail *string          `json:"partner_email,omitempty"`
+	CompanyID    *int             `json:"company_id,omitempty"`
 	SaleOrderIDs *odoo.ReplaceIDs `json:"sale_order_ids,omitempty"`
 	TeamID       *int             `json:"team_id,omitempty"`
 	StageID      *int             `json:"stage_id,omitempty"`
@@ -51,6 +57,15 @@ func validPriority(p string) bool {
 	return false
 }
 
+func validateRelationIDs(field string, ids odoo.ReplaceIDs) error {
+	for _, id := range ids {
+		if id <= 0 {
+			return invalidArgument("%s must contain only positive IDs", field)
+		}
+	}
+	return nil
+}
+
 // validateCreateTicket checks the request shape; Odoo-side rules are left to the server.
 func validateCreateTicket(input CreateTicketRequest) error {
 	if strings.TrimSpace(input.Name) == "" {
@@ -59,17 +74,27 @@ func validateCreateTicket(input CreateTicketRequest) error {
 	if strings.TrimSpace(input.Description) == "" {
 		return invalidArgument("description must not be empty")
 	}
-	for field, id := range map[string]int{
-		"partner_id": input.PartnerID, "team_id": input.TeamID, "stage_id": input.StageID,
-		"user_id": input.UserID, "channel_id": input.ChannelID, "category_id": input.CategoryID,
-		"product_id": input.ProductID,
+	for _, f := range []struct {
+		name string
+		id   int
+	}{
+		{"partner_id", input.PartnerID}, {"company_id", input.CompanyID},
+		{"team_id", input.TeamID}, {"stage_id", input.StageID}, {"user_id", input.UserID},
+		{"channel_id", input.ChannelID}, {"category_id", input.CategoryID},
+		{"product_id", input.ProductID},
 	} {
-		if id < 0 {
-			return invalidArgument("%s must not be negative", field)
+		if f.id < 0 {
+			return invalidArgument("%s must not be negative", f.name)
 		}
 	}
 	if input.Priority != "" && !validPriority(input.Priority) {
 		return invalidArgument("priority must be 0, 1, 2 or 3")
+	}
+	if err := validateRelationIDs("sale_order_ids", input.SaleOrderIDs); err != nil {
+		return err
+	}
+	if err := validateRelationIDs("tag_ids", input.TagIDs); err != nil {
+		return err
 	}
 	return nil
 }
@@ -82,13 +107,27 @@ func validateUpdateTicket(patch UpdateTicketRequest) error {
 	if patch.Priority != nil && *patch.Priority != "" && !validPriority(*patch.Priority) {
 		return invalidArgument("priority must be 0, 1, 2 or 3")
 	}
-	for field, id := range map[string]*int{
-		"partner_id": patch.PartnerID, "team_id": patch.TeamID, "stage_id": patch.StageID,
-		"user_id": patch.UserID, "channel_id": patch.ChannelID, "category_id": patch.CategoryID,
-		"product_id": patch.ProductID,
+	for _, f := range []struct {
+		name string
+		id   *int
+	}{
+		{"partner_id", patch.PartnerID}, {"company_id", patch.CompanyID},
+		{"team_id", patch.TeamID}, {"stage_id", patch.StageID}, {"user_id", patch.UserID},
+		{"channel_id", patch.ChannelID}, {"category_id", patch.CategoryID},
+		{"product_id", patch.ProductID},
 	} {
-		if id != nil && *id < 0 {
-			return invalidArgument("%s must not be negative", field)
+		if f.id != nil && *f.id < 0 {
+			return invalidArgument("%s must not be negative", f.name)
+		}
+	}
+	if patch.SaleOrderIDs != nil {
+		if err := validateRelationIDs("sale_order_ids", *patch.SaleOrderIDs); err != nil {
+			return err
+		}
+	}
+	if patch.TagIDs != nil {
+		if err := validateRelationIDs("tag_ids", *patch.TagIDs); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -133,6 +172,9 @@ func (c *Client) ticketExists(ctx context.Context, id int) (bool, error) {
 		"domain": []any{[]any{"id", "=", id}},
 		"fields": []string{"id"},
 		"limit":  1,
+		"context": map[string]any{
+			"active_test": false,
+		},
 	}, &rows)
 	if err != nil {
 		return false, fmt.Errorf("check ticket %d: %w", id, err)
@@ -183,9 +225,8 @@ func (c *Client) CreateTicket(ctx context.Context, input CreateTicketRequest) (i
 // ID and does not retry.
 func (c *Client) UpdateTicket(ctx context.Context, id int, patch UpdateTicketRequest) error {
 	var (
-		err    error
-		vals   map[string]any
-		exists bool
+		err  error
+		vals map[string]any
 	)
 
 	if id <= 0 {
@@ -197,11 +238,8 @@ func (c *Client) UpdateTicket(ctx context.Context, id int, patch UpdateTicketReq
 	if vals, err = patchValues(patch); err != nil {
 		return err
 	}
-	if exists, err = c.ticketExists(ctx, id); err != nil {
+	if err = c.requireTicket(ctx, id); err != nil {
 		return err
-	}
-	if !exists {
-		return fmt.Errorf("%w: %d", ErrTicketNotFound, id)
 	}
 	return c.writeTicket(ctx, id, vals)
 }

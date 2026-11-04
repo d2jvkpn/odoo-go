@@ -10,11 +10,12 @@
   `ListPartnerTags`, `SetProductStock`, the `Update*`/`SetProductActive` writes,
   `UpsertPartnerByRef`, and `ConfirmSaleOrder`/`CancelSaleOrder`. Writes share the helpers in
   `write.go`; there is no exported generic write or delete, and only products can be archived.
-- `oca/helpdesk` supplements the root package with OCA helpdesk ticket reads and writes
-  (`helpdesk.ticket`, `helpdesk.ticket.stage`, `helpdesk.ticket.team`, `helpdesk.ticket.channel`,
-  `mail.message`); it wraps `*odoo.Client` via `NewClient`. Ticket create/write and message posts
-  are never retried, matching the root write rule. Customer and agent messages share one
-  `message_ids` thread; the `mail.mt_comment`/`mail.mt_note` subtype decides customer visibility.
+- `oca/helpdesk` wraps `*odoo.Client` with OCA core ticket lifecycle, metadata, attachment,
+  message, follower and activity operations. Its typed delete methods are explicit and never
+  retried. The `helpdesk` CLI exposes these operations. Core ticket reads work without the
+  optional sale/product addons; callers opt into those fields. ID reads include archived tickets.
+  Customer and agent comments use `message_type=comment`; the `mail.mt_comment`/`mail.mt_note`
+  subtype distinguishes public replies from internal notes. See [helpdesk.md](helpdesk.md).
 - `cmd/odoo-cli` only parses arguments and prints JSON; reusable API behavior belongs in the root
   package.
 - `UpsertPartnerByRef` is not safe under concurrent calls for the same ref; the SDK deliberately
@@ -33,6 +34,7 @@
 ## Index
 
 - [README.md](../README.md): CLI and Go API usage, with examples for every endpoint.
+- [helpdesk.md](helpdesk.md): core helpdesk SDK/CLI operations, inputs and module requirements.
 - [manual-testing.md](manual-testing.md): CLI checks against a live Odoo server, read-only plus
   order write tests for a test database.
 - `records/` holds workflow output (plans, specs, reviews) and is deliberately not indexed.

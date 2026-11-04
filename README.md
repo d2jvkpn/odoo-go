@@ -4,7 +4,7 @@ A Go client for the
 [Odoo JSON-2 API](https://www.odoo.com/documentation/19.0/developer/reference/external_api.html)
 (available since Odoo 19). YAML configuration is loaded with `github.com/spf13/viper`.
 
-The CLI lives in `cmd/odoo-cli` and has the `products`, `orders`, `categories`, `partners` and `stock` command groups:
+The CLI lives in `cmd/odoo-cli` and has the `products`, `orders`, `categories`, `partners`, `countries`, `stock` and `helpdesk` command groups:
 
 ```sh
 go run ./cmd/odoo-cli -h
@@ -433,12 +433,16 @@ Or set `odoo.max_retries` (0 to 10) in the YAML configuration, which also applie
 
 ## Helpdesk tickets
 
-The OCA `helpdesk` addon adds `helpdesk.ticket`, linked to sales orders through the many2many
-`sale_order_ids` field. The `oca/helpdesk` subpackage supplements `*odoo.Client` with typed
-ticket reads and writes; import it as `github.com/d2jvkpn/odoo-go/oca/helpdesk`.
+The OCA `helpdesk_mgmt` addon adds `helpdesk.ticket`. The `oca/helpdesk` subpackage supplements
+`*odoo.Client` with typed ticket, attachment, message, follower and activity operations, plus
+category/tag management and team/stage lookups. The `helpdesk` CLI exposes these operations.
+See the [helpdesk guide](docs/helpdesk.md) for commands, request examples and module requirements.
 
 ```go
-import "github.com/d2jvkpn/odoo-go/oca/helpdesk"
+import (
+    odoo "github.com/d2jvkpn/odoo-go"
+    "github.com/d2jvkpn/odoo-go/oca/helpdesk"
+)
 
 c := helpdesk.NewClient(odooClient) // odooClient is *odoo.Client
 
@@ -446,7 +450,7 @@ tickets, err := c.SearchTickets(ctx, helpdesk.TicketQuery{})
 t, err := c.GetTicket(ctx, 101)
 id, err := c.CreateTicket(ctx, helpdesk.CreateTicketRequest{
     Name: "Broken pump", Description: "<p>leaks</p>",
-    PartnerID: 15, SaleOrderIDs: helpdesk.ReplaceIDs{42},
+    PartnerID: 15, SaleOrderIDs: odoo.ReplaceIDs{42}, // requires helpdesk_mgmt_sale
 })
 stage := 4
 err = c.UpdateTicket(ctx, 101, helpdesk.UpdateTicketRequest{StageID: &stage})
@@ -463,6 +467,15 @@ rule; after a transport error the write outcome may be unknown. Ticket create/wr
 and `description` (create) and reject negative relation IDs and priorities outside `0`–`3`. Both
 customer and agent messages live in the same `message_ids` thread; the subtype decides visibility
 (`mail.mt_comment` is customer-visible, `mail.mt_note` is internal-only).
+Message posts use the `comment` message type for both subtypes. HTML rendering requires an internal
+Odoo API user; Odoo escapes the body for portal users. Unset ticket priorities and message bodies
+decode as empty strings.
+
+Default ticket reads request core fields only. Set `TicketQuery.IncludeSaleOrders` for
+`helpdesk_mgmt_sale` and `TicketQuery.IncludeProduct` for `helpdesk_product`; use
+`GetTicketWithQuery` when fetching these fields by ID. These options are now required to read the
+optional associations that the original helpdesk client requested unconditionally.
+ID reads include archived tickets; searches exclude them unless `IncludeArchived` is true.
 
 ## Field mapping and Odoo reference
 
@@ -480,11 +493,7 @@ listed here are not read, so use `CallRead` for anything else.
 | `Country` | `res.country` | `id`, `name`, `code` |
 | `ProductStock` | `product.product` | `id`, `qty_available`, `virtual_available`, `free_qty` |
 | `StockLocation` | `stock.location` | `id`, `complete_name` |
-| `helpdesk.Ticket` | `helpdesk.ticket` | `id`, `name`, `number`, `description`, `partner_id`, `sale_order_ids`, `stage_id`, `team_id`, `user_id`, `priority`, `channel_id`, `category_id`, `tag_ids`, `product_id`, `closed`, `message_ids`, `create_date`, `write_date` |
-| `helpdesk.TicketMessage` | `mail.message` | `id`, `body`, `subject`, `message_type`, `subtype_id`, `author_id`, `email_from`, `date`, `parent_id` |
-| `helpdesk.TicketStage` | `helpdesk.ticket.stage` | `id`, `name`, `sequence`, `closed`, `fold` |
-| `helpdesk.TicketTeam` | `helpdesk.ticket.team` | `id`, `name` |
-| `helpdesk.TicketChannel` | `helpdesk.ticket.channel` | `id`, `name` |
+| `helpdesk` types | OCA helpdesk and Odoo mail models | See the [helpdesk guide](docs/helpdesk.md) and the exported types for field mappings and optional addon fields. |
 
 The SDK does not duplicate Odoo's own documentation. For the protocol (authentication, request
 format, error codes) see the

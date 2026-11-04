@@ -20,6 +20,7 @@ const usage = `Usage:
   odoo [-config configs/local.yaml] partners list|get|create|update|upsert|tags [options]
   odoo [-config configs/local.yaml] countries list
   odoo [-config configs/local.yaml] stock get|locations|set [options]
+  odoo [-config configs/local.yaml] helpdesk <action> [options]
 
 Use -h after a command to see its options.
 -config may appear before the command group or after the action.
@@ -78,6 +79,8 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 		command = runCountries
 	case "stock":
 		command = runStock
+	case "helpdesk":
+		command = runHelpdesk
 	default:
 		return fmt.Errorf("unknown command %q; use -h for help", args[0])
 	}
