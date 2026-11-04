@@ -18,7 +18,9 @@ type Product struct {
 	ListPrice   float64        `json:"list_price"`   // template base price, no variant extras
 	Category    Many2One       `json:"categ_id"`     // internal product.category
 	// SaleOK reports whether the product can be sold. IsStorable reports whether Odoo tracks its
-	// inventory; a product that does not has no stock, and SetProductStock refuses it.
+	// inventory; a product that does not has no stock, and SetProductStock refuses it. is_storable
+	// ("Track Inventory") is added by the stock module, so reading products fails with HTTP 500
+	// ("Invalid field 'is_storable'") on a database without it.
 	SaleOK     bool `json:"sale_ok"`
 	IsStorable bool `json:"is_storable"`
 
@@ -63,6 +65,7 @@ func ExtraValue[T any](p Product, name string) (T, bool) {
 }
 
 var (
+	// baseProductFields always includes is_storable, which exists only when the stock module is installed.
 	baseProductFields = []string{"id", "name", "default_code", "list_price", "categ_id", "sale_ok", "is_storable"}
 	// detailProductFields are the extra fields requested when ProductQuery.Details is set.
 	detailProductFields = []string{

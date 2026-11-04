@@ -8,9 +8,10 @@
   `CreateSaleOrder`, `CreateProduct`, `CreateProductCategory`, `CreatePartner`, and their `Get*`
   counterparts) are built on it, plus `GetProductStock`, `ListStockLocations`, `ListCountries`,
   `ListPartnerTags`, `SetProductStock`, the `Update*`/`SetProductActive`/`SetPartnerActive` writes,
-  `UpsertPartnerByRef`, and `ConfirmSaleOrder`/`CancelSaleOrder`. Writes share the helpers in
-  `write.go`; there is no exported generic write or delete, and only products and partners can be
-  archived.
+  `UpsertPartnerByRef`, `ConfirmSaleOrder`/`CancelSaleOrder`, and the variant helpers in
+  `variants.go` (`AddProductVariants` and the attribute, value and line creators). Writes share
+  the helpers in `write.go`; there is no exported generic write or delete, and only products and
+  partners can be archived.
 - `oca/helpdesk` wraps `*odoo.Client` with OCA core ticket lifecycle, metadata, attachment,
   message, follower and activity operations. Its typed delete methods are explicit and never
   retried. The `helpdesk` CLI exposes these operations. Core ticket reads work without the
@@ -23,7 +24,11 @@
   adds no locking. See
   [the decision record](../.agents/decisions/2026-10-27_evol_partner-upsert-locking.md).
 - Order reads request `delivery_status` (from `sale_stock`) and stock queries need the stock module,
-  so the target database must have the sales and inventory modules installed.
+  so the target database must have the sales and inventory modules installed. Product reads
+  (`Get*`/`Search*`) always request `is_storable`, a field the `stock` module adds to
+  `product.template`; without `stock` they fail with HTTP 500 "Invalid field 'is_storable'".
+  Partner calls need only `base` (`res.partner`, `res.partner.category`); the Contacts app is not
+  required, since it only adds menus and views.
 - Configuration is loaded from YAML (`odoo.base_url`, `odoo.api_key`, optional `odoo.db`) by
   `odoo.LoadClient`; default path `configs/local.yaml`, which is not committed.
 - Write calls such as order, product, and partner creation, updates, stock changes, order
@@ -38,6 +43,7 @@
 - [helpdesk.md](helpdesk.md): core helpdesk SDK/CLI operations, inputs and module requirements.
 - [order-flow.md](order-flow.md): placing orders with several shipping addresses per customer, and
   creating child address contacts idempotently.
+- [modules.md](modules.md): Odoo modules each feature depends on, by technical and Apps name.
 - [manual-testing.md](manual-testing.md): CLI checks against a live Odoo server, read-only plus
   order and helpdesk write tests for a test database.
 - `records/` holds workflow output (plans, specs, reviews) and is deliberately not indexed.
