@@ -109,3 +109,14 @@ func TestDetectMimeTypeStripsParameters(t *testing.T) {
 	assert.Equal(t, "text/plain", detectMimeType("notes", []byte("hello")))
 	assert.Equal(t, "application/octet-stream", detectMimeType("blob", []byte{0, 1, 2, 3}))
 }
+
+func TestHelpdeskDownloadChecksOutputPath(t *testing.T) {
+	dir := t.TempDir()
+	free := dir + "/new.bin"
+	taken := writeFile(t, "taken.bin", "x")
+
+	_, err := readHelpdeskInput(helpdeskOptions{action: "download", output: free})
+	assert.NoError(t, err)
+	_, err = readHelpdeskInput(helpdeskOptions{action: "download", output: taken})
+	assert.ErrorContains(t, err, "already exists")
+}

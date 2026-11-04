@@ -387,6 +387,8 @@ func TestMany2OneDecoding(t *testing.T) {
 		{`[7,"Customer"]`, Many2One{ID: 7, Name: "Customer"}},
 		{"false", Many2One{}},
 		{"null", Many2One{}},
+		{"[820,false]", Many2One{ID: 820}}, // Odoo's form for a record with an empty display name
+		{"[820,null]", Many2One{ID: 820}},
 	} {
 		value = Many2One{ID: 99, Name: "old"}
 		err = json.Unmarshal([]byte(tc.raw), &value)
@@ -394,7 +396,7 @@ func TestMany2OneDecoding(t *testing.T) {
 		assert.Equal(t, tc.want, value, tc.raw)
 	}
 
-	for _, raw := range []string{"true", "7", "[]", "[7]", "[0,\"name\"]", "[7,false]", "[7,\"name\",8]"} {
+	for _, raw := range []string{"true", "7", "[]", "[7]", "[0,\"name\"]", "[7,true]", "[7,5]", "[7,\"name\",8]"} {
 		value = Many2One{}
 		err = json.Unmarshal([]byte(raw), &value)
 		assert.Error(t, err, "accepted %s", raw)

@@ -7,7 +7,7 @@ import (
 )
 
 // Many2One decodes Odoo's [id, display_name] relation representation.
-// An unset relation (false or null) has ID zero. JSON output is an object: Odoo's [7, "Alice"]
+// An unset relation (false or null) has ID zero, and a false display name decodes to "". JSON output is an object: Odoo's [7, "Alice"]
 // becomes {"id":7,"name":"Alice"}.
 type Many2One struct {
 	ID   int    `json:"id"`   // record ID; zero when the relation is unset
@@ -38,11 +38,15 @@ func (m *Many2One) UnmarshalJSON(data []byte) error {
 	if value.ID <= 0 {
 		return fmt.Errorf("%w: relation ID must be positive", ErrUnexpectedResponse)
 	}
-	if len(parts[1]) == 0 || parts[1][0] != '"' {
-		return fmt.Errorf("%w: relation display name must be a string", ErrUnexpectedResponse)
-	}
-	if err := json.Unmarshal(parts[1], &value.Name); err != nil {
-		return fmt.Errorf("decode relation name: %w", err)
+	// Odoo sends false for a record whose display name is empty, such as a mail.message without a
+	// subject or record name, so false and null mean an empty name; any other non-string is an error.
+	if name := bytes.TrimSpace(parts[1]); !bytes.Equal(name, []byte("false")) && !bytes.Equal(name, []byte("null")) {
+		if len(name) == 0 || name[0] != '"' {
+			return fmt.Errorf("%w: relation display name must be a string", ErrUnexpectedResponse)
+		}
+		if err := json.Unmarshal(name, &value.Name); err != nil {
+			return fmt.Errorf("decode relation name: %w", err)
+		}
 	}
 	*m = value
 	return nil

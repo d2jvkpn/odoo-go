@@ -116,7 +116,7 @@ func TestCopyTicketAllowsEmptyPatchAndRejectsBadPatch(t *testing.T) {
 			fmt.Fprint(w, `[{"id":7}]`)
 		case "/json/2/helpdesk.ticket/copy":
 			assertJSON(t, requestParams(t, r), `{"ids":[7],"default":{}}`)
-			fmt.Fprint(w, `102`)
+			fmt.Fprint(w, `[102]`) // Odoo 19 returns a one-element list
 		}
 	})
 

@@ -69,6 +69,7 @@ func readHelpdeskInput(opts helpdeskOptions) (helpdeskInput, error) {
 		} else if !os.IsNotExist(err) {
 			return input, fmt.Errorf("check output path: %w", err)
 		}
+		err = nil // the path is free; do not return the Lstat "not exist" error
 	}
 	if target != nil {
 		err = decodeHelpdeskFile(opts.file, target)
