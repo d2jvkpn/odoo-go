@@ -82,6 +82,36 @@ In Go, `client.CreateProduct(ctx, odoo.CreateProductRequest{Name: "Tea"})` does 
 `ListPrice` or `SaleOK` keeps Odoo's default, while a pointer to `0` or `false` is sent explicitly. If
 the template is created but its variant cannot be read, the error names the template ID.
 
+### Variants
+
+Add variants to an existing product by attaching an attribute with values to its `product.template`
+(`product_tmpl_id` of any of its variants). Odoo generates one variant per value, or per combination
+when the template has several attributes. The attribute is created with `create_variant=always`, so
+variants exist at once rather than on first order.
+
+```sh
+go run ./cmd/odoo-cli products variants add -template 45 -attribute Weight -value 500g -value 1kg
+go run ./cmd/odoo-cli products variants list -template 45
+go run ./cmd/odoo-cli products variants price -value-id 29 -extra 2.5
+```
+
+`add` prints the template's variants; each lists its attribute value IDs in
+`product_template_variant_value_ids`, and `price` sets the extra price of one such value, so a variant
+sells at `list_price` plus the extras of its values. The writes are never retried. `add` makes three
+writes (attribute, values, template line); if a later one fails the error names the IDs already created,
+and rerunning `add` creates a second attribute, even with the same name. In Go: `AddProductVariants`, `ProductVariants`,
+`SetVariantPriceExtra`, and the lower-level `CreateProductAttribute`, `CreateProductAttributeValues`
+and `AddProductAttributeLine`.
+
+Behavior observed on Odoo 19 when variants are added to a template that already has stock or orders:
+
+- The first attribute replaces the template's default variant: its `product.product` ID, the one
+  `products create` returned, is archived and keeps its stock, while the new variants start at zero.
+- Each further attribute with two or more values regenerates the variants as combinations
+  (S, Red; S, Blue; ...) and gives them new IDs, so variant IDs from before the call are no longer
+  active. Read the IDs again from the `add` output before using them in orders or `stock set`.
+- An attribute with a single value adds a template line but creates no new variants.
+
 Configuration loading is provided by `odoo.LoadClient`. The automated tests below use a local mock
 server and never read the real configuration.
 
