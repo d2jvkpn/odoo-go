@@ -2,8 +2,9 @@
 
 Manual checks against a live Odoo server, for behavior the `httptest` fixtures cannot prove. Run
 every command from the repository root. All commands are read-only except those under
-[Order write tests](#order-write-tests); never run any write command (`create`, `update`, `upsert`,
-`archive`, `stock set -yes`, `orders confirm|cancel -yes`) against a database that holds real data,
+[Order write tests](#order-write-tests) and [Helpdesk tests](#helpdesk-tests); never run any write
+command (`create`, `update`, `upsert`, `archive`, `stock set -yes`, `orders confirm|cancel -yes`,
+and every `helpdesk` action except the reads listed there) against a database that holds real data,
 because they write records and are never retried automatically.
 
 ## Prerequisites
@@ -98,3 +99,112 @@ go run ./cmd/odoo-cli orders list -domain '[["origin","=","odoo-go-test"]]' -ord
   payment are not covered by the SDK; check them in Odoo.
 - The SDK cannot delete orders or set a partner's stock locations (shown only in Odoo developer
   mode). Clean up in the Odoo UI.
+
+## Helpdesk tests
+
+Needs Odoo 19 with OCA `helpdesk_mgmt` installed; run it only against a test database. The
+unit tests use fixtures, so the checks below are the only proof that your addon versions and the
+API user's permissions work. Keep request files under `data/tests/helpdesk/`.
+
+- Mark every test record so it can be found and cleaned up: give tickets a name starting with
+  `odoo-go-test`, and use a dedicated test partner (see [Order write tests](#order-write-tests)).
+- Unlike products, helpdesk deletes are real: `delete`, `delete-category`, `delete-tag`,
+  `delete-attachment` and `delete-activity` remove records permanently. Use them only on records
+  created by this test.
+
+Read-only checks first; these write nothing. Each should print JSON without an error, and
+`categories`, `stages` and `teams` should return at least the data configured in Odoo:
+
+```sh
+go run ./cmd/odoo-cli helpdesk count
+go run ./cmd/odoo-cli helpdesk list --limit 2
+go run ./cmd/odoo-cli helpdesk categories
+go run ./cmd/odoo-cli helpdesk tags
+go run ./cmd/odoo-cli helpdesk stages
+go run ./cmd/odoo-cli helpdesk teams
+go run ./cmd/odoo-cli helpdesk members --team-id 1
+go run ./cmd/odoo-cli helpdesk team-stages --team-id 1
+go run ./cmd/odoo-cli helpdesk activity-types
+```
+
+Optional addons: `helpdesk list --include-sale-orders` needs `helpdesk_mgmt_sale` and
+`--include-product` needs `helpdesk_product`. A missing addon should fail only when its flag is
+used; a plain `list` and `get` must still work.
+
+Ticket lifecycle. Write the ticket to `data/tests/helpdesk/ticket.json` (based on
+`examples/helpdesk/ticket.json`, with the test partner ID and a name starting `odoo-go-test`), then
+run each step and read back with `helpdesk get --id ID`:
+
+```sh
+go run ./cmd/odoo-cli helpdesk create --file data/tests/helpdesk/ticket.json
+go run ./cmd/odoo-cli helpdesk get --id ID
+go run ./cmd/odoo-cli helpdesk update --id ID --file data/tests/helpdesk/patch.json
+go run ./cmd/odoo-cli helpdesk copy --id ID
+go run ./cmd/odoo-cli helpdesk archive --id ID
+go run ./cmd/odoo-cli helpdesk list --domain '[["id","=",ID]]'
+go run ./cmd/odoo-cli helpdesk list --domain '[["id","=",ID]]' --include-archived
+go run ./cmd/odoo-cli helpdesk get --id ID
+go run ./cmd/odoo-cli helpdesk unarchive --id ID
+```
+
+- After `update`, `get` shows only the patched fields changed; a pointer to an empty value clears
+  the field.
+- After `archive`, the plain `list` returns `[]`, while `--include-archived` and `get --id` still
+  return the ticket.
+- `copy` creates a second ticket; note its ID and clean it up as well.
+- To close a ticket, pick a stage from `team-stages` and update `stage_id`; the SDK does not choose
+  one.
+
+Messages and attachments, on the ticket created above:
+
+```sh
+go run ./cmd/odoo-cli helpdesk post --id ID --file data/tests/helpdesk/message.json
+go run ./cmd/odoo-cli helpdesk messages --id ID --all
+go run ./cmd/odoo-cli helpdesk upload --id ID --input data/tests/helpdesk/photo.png --mimetype image/png
+go run ./cmd/odoo-cli helpdesk attachments --id ID
+go run ./cmd/odoo-cli helpdesk download --id ID --attachment-id AID --output data/tests/helpdesk/out.png
+go run ./cmd/odoo-cli helpdesk delete-attachment --id ID --attachment-id AID
+```
+
+- Post once with `"internal": false` and once with `"internal": true`. Both appear in `messages`;
+  in Odoo the first is a public reply (`mail.mt_comment`) and the second an internal note
+  (`mail.mt_note`).
+- The downloaded file must be byte-identical to the uploaded one (`cmp`). A second `download` to
+  the same `--output` path must fail without overwriting.
+- `attachments` lists metadata only, with no binary payload or access token.
+- Use an attachment ID that belongs to another ticket; `download` and `delete-attachment` must
+  refuse it.
+
+Followers and activities. Use partner IDs (not user IDs) for followers and a user ID for the
+activity:
+
+```sh
+go run ./cmd/odoo-cli helpdesk followers --id ID
+go run ./cmd/odoo-cli helpdesk subscribe --id ID --partner-ids PID
+go run ./cmd/odoo-cli helpdesk unsubscribe --id ID --partner-ids PID
+go run ./cmd/odoo-cli helpdesk schedule --id ID --file data/tests/helpdesk/activity.json
+go run ./cmd/odoo-cli helpdesk activities --id ID
+go run ./cmd/odoo-cli helpdesk update-activity --id ID --activity-id AID --file data/tests/helpdesk/activity-patch.json
+go run ./cmd/odoo-cli helpdesk complete-activity --id ID --activity-id AID --feedback 'done'
+go run ./cmd/odoo-cli helpdesk delete-activity --id ID --activity-id AID
+```
+
+- `subscribe` then `followers` lists the partner; `unsubscribe` removes it.
+- A completed activity leaves `activities` and appears as a message on the ticket.
+- Passing the ID of an activity that belongs to another ticket must be rejected before any write.
+
+Categories and tags are Odoo-wide configuration, so create throwaway ones with a distinctive name
+and delete them when done:
+
+```sh
+go run ./cmd/odoo-cli helpdesk create-category --file data/tests/helpdesk/category.json
+go run ./cmd/odoo-cli helpdesk update-category --id CID --file data/tests/helpdesk/category-patch.json
+go run ./cmd/odoo-cli helpdesk delete-category --id CID
+go run ./cmd/odoo-cli helpdesk create-tag --file data/tests/helpdesk/tag.json
+go run ./cmd/odoo-cli helpdesk update-tag --id TID --file data/tests/helpdesk/tag-patch.json
+go run ./cmd/odoo-cli helpdesk delete-tag --id TID
+```
+
+Finally clean up. `helpdesk delete --id ID` removes each ticket created or copied here, but it is
+permanent; confirm the ID first with `helpdesk get --id ID`. The SDK cannot delete the test
+partner; remove it in the Odoo UI if it was created only for this run.

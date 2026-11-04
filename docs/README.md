@@ -21,7 +21,7 @@
   package.
 - `UpsertPartnerByRef` is not safe under concurrent calls for the same ref; the SDK deliberately
   adds no locking. See
-  [the decision record](records/decisions/2026-10-27_evol_partner-upsert-locking.md).
+  [the decision record](../.agents/decisions/2026-10-27_evol_partner-upsert-locking.md).
 - Order reads request `delivery_status` (from `sale_stock`) and stock queries need the stock module,
   so the target database must have the sales and inventory modules installed.
 - Configuration is loaded from YAML (`odoo.base_url`, `odoo.api_key`, optional `odoo.db`) by
@@ -36,6 +36,8 @@
 
 - [README.md](../README.md): CLI and Go API usage, with examples for every endpoint.
 - [helpdesk.md](helpdesk.md): core helpdesk SDK/CLI operations, inputs and module requirements.
+- [order-flow.md](order-flow.md): placing orders with several shipping addresses per customer, and
+  creating child address contacts idempotently.
 - [manual-testing.md](manual-testing.md): CLI checks against a live Odoo server, read-only plus
-  order write tests for a test database.
+  order and helpdesk write tests for a test database.
 - `records/` holds workflow output (plans, specs, reviews) and is deliberately not indexed.
