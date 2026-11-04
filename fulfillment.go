@@ -100,8 +100,23 @@ func (c *Client) orderRelationIDs(ctx context.Context, orderID int, field string
 // changes can show between them.
 func (c *Client) OrderPickings(ctx context.Context, orderID int) ([]StockPicking, error) {
 	var (
+		err error
+		ids []int
+	)
+
+	if ids, err = c.orderRelationIDs(ctx, orderID, "picking_ids"); err != nil {
+		return nil, err
+	}
+	if len(ids) == 0 {
+		return make([]StockPicking, 0), nil
+	}
+	return c.readPickings(ctx, ids)
+}
+
+// readPickings reads deliveries by ID and attaches their product moves.
+func (c *Client) readPickings(ctx context.Context, ids []int) ([]StockPicking, error) {
+	var (
 		err      error
-		ids      []int
 		pickings = make([]StockPicking, 0)
 		moves    []StockMove
 		byID     map[int]int
@@ -109,12 +124,6 @@ func (c *Client) OrderPickings(ctx context.Context, orderID int) ([]StockPicking
 		move     StockMove
 	)
 
-	if ids, err = c.orderRelationIDs(ctx, orderID, "picking_ids"); err != nil {
-		return nil, err
-	}
-	if len(ids) == 0 {
-		return pickings, nil
-	}
 	err = c.CallRead(ctx, "stock.picking", "read", map[string]any{
 		"ids": ids,
 		"fields": []string{
@@ -123,7 +132,7 @@ func (c *Client) OrderPickings(ctx context.Context, orderID int) ([]StockPicking
 		},
 	}, &pickings)
 	if err != nil {
-		return nil, fmt.Errorf("read sales order %d deliveries: %w", orderID, err)
+		return nil, fmt.Errorf("read deliveries: %w", err)
 	}
 	err = c.CallRead(ctx, "stock.move", "search_read", map[string]any{
 		"domain": []any{[]any{"picking_id", "in", ids}},
@@ -131,7 +140,7 @@ func (c *Client) OrderPickings(ctx context.Context, orderID int) ([]StockPicking
 		"order":  "id",
 	}, &moves)
 	if err != nil {
-		return nil, fmt.Errorf("read sales order %d delivery moves: %w", orderID, err)
+		return nil, fmt.Errorf("read delivery moves: %w", err)
 	}
 	byID = make(map[int]int, len(pickings))
 	for i = range pickings {

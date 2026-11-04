@@ -10,9 +10,9 @@
   `ListPartnerTags`, `SetProductStock`, the `Update*`/`SetProductActive`/`SetPartnerActive` writes,
   `UpsertPartnerByRef`, `ConfirmSaleOrder`/`CancelSaleOrder`, and the variant helpers in
   `variants.go` (`AddProductVariants` and the attribute, value and line creators), and the
-  read-only `OrderPickings`/`OrderInvoices`/`OrderPayments` in `fulfillment.go`. Writes share the
-  helpers in `write.go`; there is no exported generic write or delete, and only products and
-  partners can be archived.
+  read-only `OrderPickings`/`OrderInvoices`/`OrderPayments` in `fulfillment.go`, plus
+  `ValidatePicking` in `picking.go`. Writes share the helpers in `write.go`; there is no exported
+  generic write or delete, and only products and partners can be archived.
 - `oca/helpdesk` wraps `*odoo.Client` with OCA core ticket lifecycle, metadata, attachment,
   message, follower and activity operations. Its typed delete methods are explicit and never
   retried. The `helpdesk` CLI exposes these operations. Core ticket reads work without the
@@ -33,8 +33,8 @@
 - Configuration is loaded from YAML (`odoo.base_url`, `odoo.api_key`, optional `odoo.db`) by
   `odoo.LoadClient`; default path `configs/local.yaml`, which is not committed.
 - Write calls such as order, product, and partner creation, updates, stock changes, order
-  confirm/cancel, and the generic `Call` are never retried automatically. `Client.Retry` (or
-  `odoo.max_retries`) opts read-only calls (`CallRead`, `Search*`, `Get*`,
+  confirm/cancel, delivery validation, and the generic `Call` are never retried automatically.
+  `Client.Retry` (or `odoo.max_retries`) opts read-only calls (`CallRead`, `Search*`, `Get*`,
   `GetProductStock`, `ListStockLocations`, `ListCountries`, `ListPartnerTags`) into retries of
   transient failures only.
 

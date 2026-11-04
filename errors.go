@@ -32,6 +32,13 @@ var (
 	ErrAmbiguousPartner = errors.New("more than one partner has this ref")
 	// ErrInvalidOrderState means the order's state does not allow the requested transition.
 	ErrInvalidOrderState = errors.New("invalid sales order state")
+	// ErrPickingNotFound means no delivery visible to this API user matched the ID.
+	ErrPickingNotFound = errors.New("delivery not found")
+	// ErrInvalidPickingState means the delivery is not ready, so it cannot be validated.
+	ErrInvalidPickingState = errors.New("invalid delivery state")
+	// ErrBackorderRequired means the reserved quantity is below the demand, so validating would split the
+	// delivery. Nothing was changed; retry with ValidatePickingOptions.Backorder to create a backorder.
+	ErrBackorderRequired = errors.New("delivery needs a backorder")
 )
 
 // HTTPError is returned by Client.Call for a non-2xx response. Body holds at most 4096 bytes. Use errors.As to

@@ -230,8 +230,30 @@ go run ./cmd/odoo-cli orders payments -id 29
 - `payments` lists payments reconciled with those invoices. A payment not yet reconciled with an
   invoice is not linked to the order and is not shown.
 
-In Go: `OrderPickings`, `OrderInvoices` and `OrderPayments`. The SDK does not validate deliveries,
-create invoices or register payments; do those in Odoo.
+In Go: `OrderPickings`, `OrderInvoices` and `OrderPayments`. The SDK does not create invoices or
+register payments; do those in Odoo.
+
+### Validating a delivery
+
+`pickings validate` is the "Validate" button on a ready (`assigned`) delivery: the reserved quantities
+leave the stock, the delivery becomes `done` and the order's `delivery_status` advances. It cannot be
+undone except by a return in Odoo, so without `-yes` it only reports the action and sends nothing.
+
+```sh
+go run ./cmd/odoo-cli orders pickings -id 26                    # find the delivery ID
+go run ./cmd/odoo-cli pickings validate -id 16 -yes
+go run ./cmd/odoo-cli pickings validate -id 16 -backorder -yes
+```
+
+The reserved quantity is validated as is; the SDK never changes quantities. When it is below the demand
+(for example 8 reserved of 12 ordered) Odoo asks about a backorder: without `-backorder` the command
+fails with "delivery needs a backorder" and changes nothing, with it the delivered part is validated and
+a new delivery holds the rest, so the order shows `delivery_status` `partial`. A delivery that is not
+`assigned` is rejected before anything is sent, and any other question Odoo opens (immediate transfer,
+lot or serial numbers) is reported as an unexpected response without changing the delivery. The write
+is never retried; after a transport error read the delivery with `orders pickings` before trying again.
+In Go: `ValidatePicking(ctx, id, odoo.ValidatePickingOptions{Backorder: true})`, which returns the
+delivery as read afterwards.
 
 ## Customers, stock, and order transitions
 
