@@ -2,7 +2,8 @@ package helpdesk
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 
 	odoo "github.com/d2jvkpn/odoo-go"
@@ -58,7 +59,7 @@ func (c *Client) CopyTicket(ctx context.Context, id int, patch UpdateTicketReque
 	var (
 		err    error
 		copyID int
-		raw    json.RawMessage
+		raw    jsontext.Value
 		ids    []int
 		vals   map[string]any
 	)
@@ -86,8 +87,8 @@ func (c *Client) CopyTicket(ctx context.Context, id int, patch UpdateTicketReque
 		return 0, fmt.Errorf("copy ticket %d: %w", id, err)
 	}
 	// Odoo 19 returns the new record as a one-element ID list; accept a bare ID as well.
-	if json.Unmarshal(raw, &copyID) != nil {
-		if json.Unmarshal(raw, &ids) != nil || len(ids) != 1 {
+	if jsonv2.Unmarshal(raw, &copyID) != nil {
+		if jsonv2.Unmarshal(raw, &ids) != nil || len(ids) != 1 {
 			return 0, fmt.Errorf("%w: expected one ID from ticket copy", odoo.ErrUnexpectedResponse)
 		}
 		copyID = ids[0]

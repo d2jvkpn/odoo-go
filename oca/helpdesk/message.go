@@ -2,7 +2,7 @@ package helpdesk
 
 import (
 	"context"
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 	"strings"
 
@@ -56,7 +56,7 @@ func (m *TicketMessage) UnmarshalJSON(data []byte) error {
 		Body odoo.OptionalString `json:"body"`
 	}
 
-	if err := json.Unmarshal(data, &aux); err != nil {
+	if err := jsonv2.Unmarshal(data, &aux); err != nil {
 		return err
 	}
 	*m = TicketMessage(aux.plain)

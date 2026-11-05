@@ -1,7 +1,7 @@
 package helpdesk
 
 import (
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 
 	odoo "github.com/d2jvkpn/odoo-go"
 )
@@ -47,7 +47,7 @@ func (t *Ticket) UnmarshalJSON(data []byte) error {
 		Priority odoo.OptionalString `json:"priority"`
 	}
 
-	if err := json.Unmarshal(data, &aux); err != nil {
+	if err := jsonv2.Unmarshal(data, &aux); err != nil {
 		return err
 	}
 	*t = Ticket(aux.plain)

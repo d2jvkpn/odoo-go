@@ -2,7 +2,7 @@ package helpdesk
 
 import (
 	"context"
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 	"time"
 
@@ -48,7 +48,7 @@ func (a *TicketActivity) UnmarshalJSON(data []byte) error {
 		Note    odoo.OptionalString `json:"note"`
 	}
 
-	if err := json.Unmarshal(data, &aux); err != nil {
+	if err := jsonv2.Unmarshal(data, &aux); err != nil {
 		return err
 	}
 	*a = TicketActivity(aux.plain)
@@ -77,7 +77,7 @@ func (a *TicketActivityType) UnmarshalJSON(data []byte) error {
 		ResModel odoo.OptionalString `json:"res_model"`
 	}
 
-	if err := json.Unmarshal(data, &aux); err != nil {
+	if err := jsonv2.Unmarshal(data, &aux); err != nil {
 		return err
 	}
 	*a = TicketActivityType(aux.plain)

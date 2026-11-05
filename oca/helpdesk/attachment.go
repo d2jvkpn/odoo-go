@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 	"strings"
 
@@ -37,7 +37,7 @@ func (data *attachmentData) UnmarshalJSON(raw []byte) error {
 		*data = nil
 		return nil
 	}
-	if err = json.Unmarshal(raw, &value); err != nil {
+	if err = jsonv2.Unmarshal(raw, &value); err != nil {
 		return fmt.Errorf("decode attachment data value: %w", err)
 	}
 	if decoded, err = base64.StdEncoding.DecodeString(value); err != nil {
