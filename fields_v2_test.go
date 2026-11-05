@@ -62,3 +62,10 @@ func TestRequestOmitsUnsetFields(t *testing.T) {
 	require.NoError(t, json.Unmarshal(data, &got))
 	assert.NotContains(t, got, "categ_id")
 }
+
+func TestUpdatePartnerSendsEmptyStreet2(t *testing.T) {
+	empty := ""
+	vals, err := patchValues(UpdatePartnerRequest{Street2: &empty})
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{"street2": ""}, vals)
+}

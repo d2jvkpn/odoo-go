@@ -164,7 +164,7 @@ type CreatePartnerRequest struct {
 	Phone           string     `json:"phone,omitempty"`            // optional
 	Ref             string     `json:"ref,omitempty"`              // optional caller identifier, e.g. "user-42"
 	Street          string     `json:"street,omitempty"`           // optional
-	Street2         string     `json:"street2,omitempty"`          // optional
+	Street2         string     `json:"street2,omitzero"`           // optional
 	City            string     `json:"city,omitempty"`             // optional
 	Zip             string     `json:"zip,omitempty"`              // optional
 	StateID         int        `json:"state_id,omitzero"`          // optional res.country.state ID; >= 0
@@ -254,7 +254,7 @@ type UpdatePartnerRequest struct {
 	Phone           *string     `json:"phone,omitzero"`
 	Ref             *string     `json:"ref,omitzero"`
 	Street          *string     `json:"street,omitzero"`
-	Street2         *string     `json:"street2,omitempty"`
+	Street2         *string     `json:"street2,omitzero"`
 	City            *string     `json:"city,omitzero"`
 	Zip             *string     `json:"zip,omitzero"`
 	StateID         *int        `json:"state_id,omitzero"`   // res.country.state ID; must not be negative

@@ -30,6 +30,13 @@
   `product.template`; without `stock` they fail with HTTP 500 "Invalid field 'is_storable'".
   Partner calls need only `base` (`res.partner`, `res.partner.category`); the Contacts app is not
   required, since it only adds menus and views.
+- All JSON is encoded and decoded with `encoding/json/v2`, with no leniency options. Responses
+  with invalid UTF-8, duplicate member names or trailing data fail with `ErrUnexpectedResponse`,
+  and member names are case-sensitive. v2's `omitempty` judges the encoded value, so request and
+  output struct fields that are numbers, bools, pointers or `ReplaceIDs` use `omitzero`;
+  otherwise zero IDs would be sent and a pointer to `""` could not clear a field. `*ReplaceIDs`
+  keeps `omitempty` so an empty list can still clear all tags. Tests may still use
+  `encoding/json` as an independent reference.
 - Configuration is loaded from YAML (`odoo.base_url`, `odoo.api_key`, optional `odoo.db`) by
   `odoo.LoadClient`; default path `configs/local.yaml`, which is not committed.
 - Write calls such as order, product, and partner creation, updates, stock changes, order
