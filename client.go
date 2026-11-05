@@ -3,7 +3,7 @@ package odoo
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 	"io"
 	"net/http"
@@ -70,7 +70,7 @@ func (c *Client) call(
 		msg        []byte
 	)
 
-	if body, err = json.Marshal(params); err != nil {
+	if body, err = jsonv2.Marshal(params); err != nil {
 		return fmt.Errorf("encode parameters: %w", err)
 	}
 	body = bytes.TrimSpace(body)
@@ -123,7 +123,7 @@ func (c *Client) call(
 		}
 		return nil
 	}
-	if err := json.NewDecoder(resp.Body).Decode(result); err != nil {
+	if err := jsonv2.UnmarshalRead(resp.Body, result); err != nil {
 		return fmt.Errorf("%w: decode response: %w", ErrUnexpectedResponse, err)
 	}
 	return nil

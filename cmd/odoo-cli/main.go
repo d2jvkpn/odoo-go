@@ -3,7 +3,7 @@ package main
 
 import (
 	"context"
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"flag"
 	"fmt"
@@ -125,7 +125,7 @@ func parseDomain(text string) ([]any, error) {
 		err    error
 	)
 
-	if err = json.Unmarshal([]byte(text), &domain); err != nil || domain == nil {
+	if err = jsonv2.Unmarshal([]byte(text), &domain); err != nil || domain == nil {
 		return nil, fmt.Errorf("domain must be a JSON array")
 	}
 	return domain, nil

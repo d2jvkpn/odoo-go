@@ -42,8 +42,8 @@ type MessageQuery struct {
 type PostTicketMessageRequest struct {
 	Body          string `json:"body"`
 	Subject       string `json:"subject,omitempty"`
-	Internal      bool   `json:"internal,omitempty"`
-	ParentID      int    `json:"parent_id,omitempty"`
+	Internal      bool   `json:"internal,omitzero"`
+	ParentID      int    `json:"parent_id,omitzero"`
 	PartnerIDs    []int  `json:"partner_ids,omitempty"`
 	AttachmentIDs []int  `json:"attachment_ids,omitempty"`
 }

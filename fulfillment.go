@@ -2,7 +2,8 @@ package odoo
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 )
 
@@ -74,7 +75,7 @@ type Payment struct {
 func (c *Client) orderRelationIDs(ctx context.Context, orderID int, field string) ([]int, error) {
 	var (
 		err  error
-		rows []map[string]json.RawMessage
+		rows []map[string]jsontext.Value
 		ids  []int
 	)
 
@@ -88,7 +89,7 @@ func (c *Client) orderRelationIDs(ctx context.Context, orderID int, field string
 	if len(rows) == 0 {
 		return nil, fmt.Errorf("%w: %d", ErrSaleOrderNotFound, orderID)
 	}
-	if err = json.Unmarshal(rows[0][field], &ids); err != nil {
+	if err = jsonv2.Unmarshal(rows[0][field], &ids); err != nil {
 		return nil, fmt.Errorf("%w: sales order %d %s: %v", ErrUnexpectedResponse, orderID, field, err)
 	}
 	return ids, nil

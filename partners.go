@@ -2,7 +2,7 @@ package odoo
 
 import (
 	"context"
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 	"strings"
 )
@@ -52,16 +52,19 @@ var partnerFields = []string{
 // command [[6, 0, ids]]; in a JSON file it is a plain list of IDs.
 type ReplaceIDs []int
 
+// IsZero reports whether there are no IDs, so omitzero drops the field like omitempty did in v1.
+func (r ReplaceIDs) IsZero() bool { return len(r) == 0 }
+
 // MarshalJSON encodes the IDs as the Odoo "replace all" command.
 func (r ReplaceIDs) MarshalJSON() ([]byte, error) {
-	return json.Marshal([]any{[]any{6, 0, append([]int{}, r...)}})
+	return jsonv2.Marshal([]any{[]any{6, 0, append([]int{}, r...)}})
 }
 
 // UnmarshalJSON decodes a plain list of IDs.
 func (r *ReplaceIDs) UnmarshalJSON(data []byte) error {
 	var ids []int
 
-	if err := json.Unmarshal(data, &ids); err != nil {
+	if err := jsonv2.Unmarshal(data, &ids); err != nil {
 		return err
 	}
 	*r = ids
@@ -77,7 +80,7 @@ func (p *Partner) UnmarshalJSON(data []byte) error {
 		Name OptionalString `json:"name"`
 	}
 
-	if err := json.Unmarshal(data, &aux); err != nil {
+	if err := jsonv2.Unmarshal(data, &aux); err != nil {
 		return err
 	}
 	*p = Partner(aux.plain)
@@ -164,22 +167,22 @@ type CreatePartnerRequest struct {
 	Street2         string     `json:"street2,omitempty"`          // optional
 	City            string     `json:"city,omitempty"`             // optional
 	Zip             string     `json:"zip,omitempty"`              // optional
-	StateID         int        `json:"state_id,omitempty"`         // optional res.country.state ID; >= 0
-	CountryID       int        `json:"country_id,omitempty"`       // optional res.country ID; >= 0
+	StateID         int        `json:"state_id,omitzero"`          // optional res.country.state ID; >= 0
+	CountryID       int        `json:"country_id,omitzero"`        // optional res.country ID; >= 0
 	Website         string     `json:"website,omitempty"`          // optional
-	IsCompany       bool       `json:"is_company,omitempty"`       // true for a company, false for a person
+	IsCompany       bool       `json:"is_company,omitzero"`        // true for a company, false for a person
 	Type            string     `json:"type,omitempty"`             // optional: contact, invoice, delivery or other
-	ParentID        int        `json:"parent_id,omitempty"`        // optional res.partner ID; >= 0
+	ParentID        int        `json:"parent_id,omitzero"`         // optional res.partner ID; >= 0
 	Function        string     `json:"function,omitempty"`         // optional job position
 	VAT             string     `json:"vat,omitempty"`              // optional tax ID
 	CompanyRegistry string     `json:"company_registry,omitempty"` // optional
 	Lang            string     `json:"lang,omitempty"`             // optional installed language code, e.g. "en_US"
 	Comment         string     `json:"comment,omitempty"`          // optional internal notes
-	CategoryIDs     ReplaceIDs `json:"category_id,omitempty"`      // optional res.partner.category IDs
-	UserID          int        `json:"user_id,omitempty"`          // optional res.users ID of the salesperson; >= 0
-	CompanyID       int        `json:"company_id,omitempty"`       // optional res.company ID; >= 0
+	CategoryIDs     ReplaceIDs `json:"category_id,omitzero"`       // optional res.partner.category IDs
+	UserID          int        `json:"user_id,omitzero"`           // optional res.users ID of the salesperson; >= 0
+	CompanyID       int        `json:"company_id,omitzero"`        // optional res.company ID; >= 0
 	Barcode         string     `json:"barcode,omitempty"`          // optional
-	IndustryID      int        `json:"industry_id,omitempty"`      // optional res.partner.industry ID; >= 0
+	IndustryID      int        `json:"industry_id,omitzero"`       // optional res.partner.industry ID; >= 0
 }
 
 // validPartnerType reports whether t is an Odoo partner address type.
@@ -246,30 +249,30 @@ func (c *Client) CreatePartner(ctx context.Context, input CreatePartnerRequest) 
 // Name, if set, must not be blank; a pointer to "" clears the other text fields, a pointer to 0 clears
 // a relation, and a pointer to an empty CategoryIDs removes all tags.
 type UpdatePartnerRequest struct {
-	Name            *string     `json:"name,omitempty"`
-	Email           *string     `json:"email,omitempty"`
-	Phone           *string     `json:"phone,omitempty"`
-	Ref             *string     `json:"ref,omitempty"`
-	Street          *string     `json:"street,omitempty"`
+	Name            *string     `json:"name,omitzero"`
+	Email           *string     `json:"email,omitzero"`
+	Phone           *string     `json:"phone,omitzero"`
+	Ref             *string     `json:"ref,omitzero"`
+	Street          *string     `json:"street,omitzero"`
 	Street2         *string     `json:"street2,omitempty"`
-	City            *string     `json:"city,omitempty"`
-	Zip             *string     `json:"zip,omitempty"`
-	StateID         *int        `json:"state_id,omitempty"`   // res.country.state ID; must not be negative
-	CountryID       *int        `json:"country_id,omitempty"` // res.country ID; must not be negative
-	Website         *string     `json:"website,omitempty"`
-	IsCompany       *bool       `json:"is_company,omitempty"`
-	Type            *string     `json:"type,omitempty"`      // contact, invoice, delivery or other
-	ParentID        *int        `json:"parent_id,omitempty"` // res.partner ID; must not be negative
-	Function        *string     `json:"function,omitempty"`
-	VAT             *string     `json:"vat,omitempty"`
-	CompanyRegistry *string     `json:"company_registry,omitempty"`
-	Lang            *string     `json:"lang,omitempty"`
-	Comment         *string     `json:"comment,omitempty"`
+	City            *string     `json:"city,omitzero"`
+	Zip             *string     `json:"zip,omitzero"`
+	StateID         *int        `json:"state_id,omitzero"`   // res.country.state ID; must not be negative
+	CountryID       *int        `json:"country_id,omitzero"` // res.country ID; must not be negative
+	Website         *string     `json:"website,omitzero"`
+	IsCompany       *bool       `json:"is_company,omitzero"`
+	Type            *string     `json:"type,omitzero"`      // contact, invoice, delivery or other
+	ParentID        *int        `json:"parent_id,omitzero"` // res.partner ID; must not be negative
+	Function        *string     `json:"function,omitzero"`
+	VAT             *string     `json:"vat,omitzero"`
+	CompanyRegistry *string     `json:"company_registry,omitzero"`
+	Lang            *string     `json:"lang,omitzero"`
+	Comment         *string     `json:"comment,omitzero"`
 	CategoryIDs     *ReplaceIDs `json:"category_id,omitempty"` // replaces all tags
-	UserID          *int        `json:"user_id,omitempty"`     // res.users ID; must not be negative
-	CompanyID       *int        `json:"company_id,omitempty"`  // res.company ID; must not be negative
-	Barcode         *string     `json:"barcode,omitempty"`
-	IndustryID      *int        `json:"industry_id,omitempty"` // res.partner.industry ID; must not be negative
+	UserID          *int        `json:"user_id,omitzero"`      // res.users ID; must not be negative
+	CompanyID       *int        `json:"company_id,omitzero"`   // res.company ID; must not be negative
+	Barcode         *string     `json:"barcode,omitzero"`
+	IndustryID      *int        `json:"industry_id,omitzero"` // res.partner.industry ID; must not be negative
 }
 
 // UpdatePartner changes one partner. It returns ErrPartnerNotFound for an unknown ID and does not retry.

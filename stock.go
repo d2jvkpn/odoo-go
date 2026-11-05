@@ -3,7 +3,7 @@ package odoo
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
 	"fmt"
 	"math"
 )
@@ -95,7 +95,7 @@ func (c *Client) SetProductStock(ctx context.Context, productID, locationID int,
 			IsStorable bool `json:"is_storable"`
 		}
 		quantIDs []int
-		applied  json.RawMessage
+		applied  jsontext.Value
 		adjust   = map[string]any{"inventory_mode": true}
 	)
 

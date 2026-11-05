@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -168,13 +167,11 @@ func getProduct(ctx context.Context, configPath string, id int, out io.Writer) e
 
 func createProduct(ctx context.Context, configPath, file string, out io.Writer) error {
 	var (
-		f       *os.File
-		decoder *json.Decoder
-		input   odoo.CreateProductRequest
-		extra   any
-		client  *odoo.Client
-		id      int
-		err     error
+		f      *os.File
+		input  odoo.CreateProductRequest
+		client *odoo.Client
+		id     int
+		err    error
 	)
 
 	if file == "" {
@@ -184,13 +181,10 @@ func createProduct(ctx context.Context, configPath, file string, out io.Writer) 
 		return fmt.Errorf("open product file: %w", err)
 	}
 	defer f.Close()
-	decoder = json.NewDecoder(f)
-	decoder.DisallowUnknownFields()
-	if err = decoder.Decode(&input); err != nil {
-		return fmt.Errorf("decode product file: %w", err)
-	}
-	if err = decoder.Decode(&extra); err != io.EOF {
+	if err = decodeStrict(f, &input); errors.Is(err, errNotOneObject) {
 		return fmt.Errorf("product file must contain exactly one JSON object")
+	} else if err != nil {
+		return fmt.Errorf("decode product file: %w", err)
 	}
 	if client, err = odoo.LoadClient(configPath); err != nil {
 		return err
@@ -205,10 +199,7 @@ func createProduct(ctx context.Context, configPath, file string, out io.Writer) 
 
 // writeJSON prints value as indented JSON.
 func writeJSON(out io.Writer, value any, what string) error {
-	var encoder *json.Encoder = json.NewEncoder(out)
-
-	encoder.SetIndent("", "  ")
-	if err := encoder.Encode(value); err != nil {
+	if err := printJSON(out, value); err != nil {
 		return fmt.Errorf("write %s: %w", what, err)
 	}
 	return nil

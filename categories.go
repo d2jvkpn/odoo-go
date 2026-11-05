@@ -163,8 +163,8 @@ func categoryDomain(query ProductCategoryQuery) ([]any, error) {
 // CreateProductCategoryRequest describes a new category. The JSON names are Odoo's field names. ParentID zero
 // creates a root category.
 type CreateProductCategoryRequest struct {
-	Name     string `json:"name"`                // required, not blank
-	ParentID int    `json:"parent_id,omitempty"` // optional parent category ID of the same type; >= 0
+	Name     string `json:"name"`               // required, not blank
+	ParentID int    `json:"parent_id,omitzero"` // optional parent category ID of the same type; >= 0
 }
 
 // CreateProductCategory creates one category in the selected model and returns its ID. It does not retry.
@@ -205,8 +205,8 @@ func (c *Client) CreateProductCategory(
 // UpdateProductCategoryRequest changes selected fields of a category. Nil fields are left unchanged;
 // a pointer to zero ParentID detaches the category from its parent.
 type UpdateProductCategoryRequest struct {
-	Name     *string `json:"name,omitempty"`      // new name; must not be blank
-	ParentID *int    `json:"parent_id,omitempty"` // new parent ID; zero detaches
+	Name     *string `json:"name,omitzero"`      // new name; must not be blank
+	ParentID *int    `json:"parent_id,omitzero"` // new parent ID; zero detaches
 }
 
 // UpdateProductCategory changes one category of the selected type. It returns

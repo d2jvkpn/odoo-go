@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -40,13 +39,10 @@ func runOrders(ctx context.Context, args []string, out io.Writer) error {
 		id         int
 		input      odoo.CreateSaleOrderRequest
 		f          *os.File
-		decoder    *json.Decoder
-		extra      any
 		client     *odoo.Client
 		result     any
 		createdID  int
 		countValue int
-		encoder    *json.Encoder
 		err        error
 	)
 
@@ -117,13 +113,10 @@ func runOrders(ctx context.Context, args []string, out io.Writer) error {
 			return fmt.Errorf("open order file: %w", err)
 		}
 		defer f.Close()
-		decoder = json.NewDecoder(f)
-		decoder.DisallowUnknownFields()
-		if err = decoder.Decode(&input); err != nil {
-			return fmt.Errorf("decode order file: %w", err)
-		}
-		if err = decoder.Decode(&extra); err != io.EOF {
+		if err = decodeStrict(f, &input); errors.Is(err, errNotOneObject) {
 			return fmt.Errorf("order file must contain exactly one JSON object")
+		} else if err != nil {
+			return fmt.Errorf("decode order file: %w", err)
 		}
 	}
 	client, err = odoo.LoadClient(*configPath)
@@ -151,9 +144,7 @@ func runOrders(ctx context.Context, args []string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	encoder = json.NewEncoder(out)
-	encoder.SetIndent("", "  ")
-	if err = encoder.Encode(result); err != nil {
+	if err = printJSON(out, result); err != nil {
 		return fmt.Errorf("write orders: %w", err)
 	}
 	return nil

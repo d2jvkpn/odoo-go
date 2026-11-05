@@ -146,11 +146,11 @@ func (c *Client) GetSaleOrder(ctx context.Context, id int) (*SaleOrder, error) {
 // Required: PartnerID (> 0) and at least one line. All other fields are optional.
 type CreateSaleOrderRequest struct {
 	PartnerID   int `json:"partner_id"                 validate:"gt=0"` // required
-	PricelistID int `json:"pricelist_id,omitempty"     validate:"gte=0"`
+	PricelistID int `json:"pricelist_id,omitzero"     validate:"gte=0"`
 	// PartnerShippingID and PartnerInvoiceID are optional res.partner IDs (typically child contacts of
 	// PartnerID with type delivery/invoice); when zero Odoo derives them from PartnerID.
-	PartnerShippingID int                   `json:"partner_shipping_id,omitempty" validate:"gte=0"`
-	PartnerInvoiceID  int                   `json:"partner_invoice_id,omitempty"  validate:"gte=0"`
+	PartnerShippingID int                   `json:"partner_shipping_id,omitzero" validate:"gte=0"`
+	PartnerInvoiceID  int                   `json:"partner_invoice_id,omitzero"  validate:"gte=0"`
 	ClientOrderRef    string                `json:"client_order_ref,omitempty"`                       // e.g. "web-1001"
 	Origin            string                `json:"origin,omitempty"`                                 // e.g. "web"
 	Note              string                `json:"note,omitempty"`                                   // HTML, e.g. "<p>Delivery within 3 days</p>"
@@ -161,9 +161,9 @@ type CreateSaleOrderRequest struct {
 // product's default unit of measure. Nil UnitPrice lets Odoo compute the price;
 // a pointer to zero explicitly creates a free line.
 type CreateSaleOrderLine struct {
-	ProductID int      `json:"product_id"           validate:"gt=0"`            // required
-	Quantity  float64  `json:"product_uom_qty"      validate:"gt=0"`            // required
-	UnitPrice *float64 `json:"price_unit,omitempty" validate:"omitempty,gte=0"` // optional, >= 0
+	ProductID int      `json:"product_id"           validate:"gt=0"`           // required
+	Quantity  float64  `json:"product_uom_qty"      validate:"gt=0"`           // required
+	UnitPrice *float64 `json:"price_unit,omitzero" validate:"omitempty,gte=0"` // optional, >= 0
 }
 
 // validateCreateSaleOrder checks the request shape and numeric bounds. Odoo-side rules are left to the server.
@@ -357,9 +357,9 @@ func (c *Client) CancelSaleOrder(ctx context.Context, id int) error {
 // UpdateSaleOrderRequest changes selected text fields of an existing order. Nil fields are left
 // unchanged; a pointer to "" clears the field. Note is HTML and is printed on the quotation.
 type UpdateSaleOrderRequest struct {
-	ClientOrderRef *string `json:"client_order_ref,omitempty"` // customer reference
-	Origin         *string `json:"origin,omitempty"`           // source document
-	Note           *string `json:"note,omitempty"`             // terms and conditions, HTML
+	ClientOrderRef *string `json:"client_order_ref,omitzero"` // customer reference
+	Origin         *string `json:"origin,omitzero"`           // source document
+	Note           *string `json:"note,omitzero"`             // terms and conditions, HTML
 }
 
 // UpdateSaleOrder changes the customer reference, source document, or note of one order. It returns

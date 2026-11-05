@@ -20,8 +20,8 @@ func TestCallRequest(t *testing.T) {
 		client   *Client
 		err      error
 		products []struct {
-			ID   int
-			Name string
+			ID   int    `json:"id"`
+			Name string `json:"name"`
 		}
 	)
 

@@ -11,41 +11,41 @@ import (
 
 // CreateTicketRequest describes a new ticket. Required: Name and Description.
 type CreateTicketRequest struct {
-	Name         string          `json:"name"`                     // required, not blank
-	Description  string          `json:"description"`              // required
-	PartnerID    int             `json:"partner_id,omitempty"`     // res.partner; >= 0
-	PartnerName  string          `json:"partner_name,omitempty"`   // contact name without a linked partner
-	PartnerEmail string          `json:"partner_email,omitempty"`  // contact email
-	CompanyID    int             `json:"company_id,omitempty"`     // res.company; >= 0
-	SaleOrderIDs odoo.ReplaceIDs `json:"sale_order_ids,omitempty"` // linked sale.order IDs
-	TeamID       int             `json:"team_id,omitempty"`        // >= 0
-	StageID      int             `json:"stage_id,omitempty"`       // >= 0
-	UserID       int             `json:"user_id,omitempty"`        // assigned res.users; >= 0
-	Priority     string          `json:"priority,omitempty"`       // "0".."3", empty for default
-	ChannelID    int             `json:"channel_id,omitempty"`     // >= 0
-	CategoryID   int             `json:"category_id,omitempty"`    // >= 0
-	TagIDs       odoo.ReplaceIDs `json:"tag_ids,omitempty"`        // helpdesk.ticket.tag IDs
-	ProductID    int             `json:"product_id,omitempty"`     // >= 0
+	Name         string          `json:"name"`                    // required, not blank
+	Description  string          `json:"description"`             // required
+	PartnerID    int             `json:"partner_id,omitzero"`     // res.partner; >= 0
+	PartnerName  string          `json:"partner_name,omitempty"`  // contact name without a linked partner
+	PartnerEmail string          `json:"partner_email,omitempty"` // contact email
+	CompanyID    int             `json:"company_id,omitzero"`     // res.company; >= 0
+	SaleOrderIDs odoo.ReplaceIDs `json:"sale_order_ids,omitzero"` // linked sale.order IDs
+	TeamID       int             `json:"team_id,omitzero"`        // >= 0
+	StageID      int             `json:"stage_id,omitzero"`       // >= 0
+	UserID       int             `json:"user_id,omitzero"`        // assigned res.users; >= 0
+	Priority     string          `json:"priority,omitempty"`      // "0".."3", empty for default
+	ChannelID    int             `json:"channel_id,omitzero"`     // >= 0
+	CategoryID   int             `json:"category_id,omitzero"`    // >= 0
+	TagIDs       odoo.ReplaceIDs `json:"tag_ids,omitzero"`        // helpdesk.ticket.tag IDs
+	ProductID    int             `json:"product_id,omitzero"`     // >= 0
 }
 
 // UpdateTicketRequest changes selected fields of a ticket. Nil fields are left unchanged; a
 // pointer to 0 clears a relation, and a pointer to an empty SaleOrderIDs/TagIDs removes all links.
 type UpdateTicketRequest struct {
-	Name         *string          `json:"name,omitempty"`
-	Description  *string          `json:"description,omitempty"`
-	PartnerID    *int             `json:"partner_id,omitempty"`
-	PartnerName  *string          `json:"partner_name,omitempty"`
-	PartnerEmail *string          `json:"partner_email,omitempty"`
-	CompanyID    *int             `json:"company_id,omitempty"`
+	Name         *string          `json:"name,omitzero"`
+	Description  *string          `json:"description,omitzero"`
+	PartnerID    *int             `json:"partner_id,omitzero"`
+	PartnerName  *string          `json:"partner_name,omitzero"`
+	PartnerEmail *string          `json:"partner_email,omitzero"`
+	CompanyID    *int             `json:"company_id,omitzero"`
 	SaleOrderIDs *odoo.ReplaceIDs `json:"sale_order_ids,omitempty"`
-	TeamID       *int             `json:"team_id,omitempty"`
-	StageID      *int             `json:"stage_id,omitempty"`
-	UserID       *int             `json:"user_id,omitempty"`
-	Priority     *string          `json:"priority,omitempty"`
-	ChannelID    *int             `json:"channel_id,omitempty"`
-	CategoryID   *int             `json:"category_id,omitempty"`
+	TeamID       *int             `json:"team_id,omitzero"`
+	StageID      *int             `json:"stage_id,omitzero"`
+	UserID       *int             `json:"user_id,omitzero"`
+	Priority     *string          `json:"priority,omitzero"`
+	ChannelID    *int             `json:"channel_id,omitzero"`
+	CategoryID   *int             `json:"category_id,omitzero"`
 	TagIDs       *odoo.ReplaceIDs `json:"tag_ids,omitempty"`
-	ProductID    *int             `json:"product_id,omitempty"`
+	ProductID    *int             `json:"product_id,omitzero"`
 }
 
 // validPriority reports whether p is one of Odoo's ticket priorities.

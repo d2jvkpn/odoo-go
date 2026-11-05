@@ -2,7 +2,8 @@ package odoo
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/jsontext"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 )
 
@@ -17,7 +18,7 @@ type Many2One struct {
 // UnmarshalJSON decodes [id, display_name], or false/null into the zero value.
 func (m *Many2One) UnmarshalJSON(data []byte) error {
 	var (
-		parts []json.RawMessage
+		parts []jsontext.Value
 		value Many2One
 	)
 
@@ -26,13 +27,13 @@ func (m *Many2One) UnmarshalJSON(data []byte) error {
 		*m = Many2One{}
 		return nil
 	}
-	if err := json.Unmarshal(data, &parts); err != nil {
+	if err := jsonv2.Unmarshal(data, &parts); err != nil {
 		return fmt.Errorf("decode relation: %w", err)
 	}
 	if len(parts) != 2 {
 		return fmt.Errorf("%w: relation must contain an ID and a display name", ErrUnexpectedResponse)
 	}
-	if err := json.Unmarshal(parts[0], &value.ID); err != nil {
+	if err := jsonv2.Unmarshal(parts[0], &value.ID); err != nil {
 		return fmt.Errorf("decode relation ID: %w", err)
 	}
 	if value.ID <= 0 {
@@ -44,7 +45,7 @@ func (m *Many2One) UnmarshalJSON(data []byte) error {
 		if len(name) == 0 || name[0] != '"' {
 			return fmt.Errorf("%w: relation display name must be a string", ErrUnexpectedResponse)
 		}
-		if err := json.Unmarshal(name, &value.Name); err != nil {
+		if err := jsonv2.Unmarshal(name, &value.Name); err != nil {
 			return fmt.Errorf("decode relation name: %w", err)
 		}
 	}
@@ -64,7 +65,7 @@ func (s *OptionalString) UnmarshalJSON(data []byte) error {
 		*s = ""
 		return nil
 	}
-	if err := json.Unmarshal(data, &value); err != nil {
+	if err := jsonv2.Unmarshal(data, &value); err != nil {
 		return fmt.Errorf("decode optional string: %w", err)
 	}
 	*s = OptionalString(value)

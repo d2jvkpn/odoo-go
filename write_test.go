@@ -22,16 +22,16 @@ func (f *failTransport) RoundTrip(*http.Request) (*http.Response, error) {
 func TestPatchValues(t *testing.T) {
 	name, zero, off := "Tea", 0.0, false
 	vals, err := patchValues(struct {
-		Name  *string  `json:"name,omitempty"`
-		Price *float64 `json:"list_price,omitempty"`
-		Sale  *bool    `json:"sale_ok,omitempty"`
-		Skip  *int     `json:"categ_id,omitempty"`
+		Name  *string  `json:"name,omitzero"`
+		Price *float64 `json:"list_price,omitzero"`
+		Sale  *bool    `json:"sale_ok,omitzero"`
+		Skip  *int     `json:"categ_id,omitzero"`
 	}{Name: &name, Price: &zero, Sale: &off})
 	require.NoError(t, err)
 	assertJSON(t, vals, `{"name":"Tea","list_price":0,"sale_ok":false}`)
 
 	_, err = patchValues(struct {
-		Name *string `json:"name,omitempty"`
+		Name *string `json:"name,omitzero"`
 	}{})
 	assert.ErrorIs(t, err, ErrInvalidArgument)
 }
@@ -40,9 +40,9 @@ func TestPatchValues(t *testing.T) {
 func TestPatchValuesClearsZeroRelationWithFalse(t *testing.T) {
 	zero, id := 0, 3
 	vals, err := patchValues(struct {
-		Parent  *int `json:"parent_id,omitempty"`
-		Country *int `json:"country_id,omitempty"`
-		Count   *int `json:"sequence,omitempty"`
+		Parent  *int `json:"parent_id,omitzero"`
+		Country *int `json:"country_id,omitzero"`
+		Count   *int `json:"sequence,omitzero"`
 	}{Parent: &zero, Country: &id, Count: &zero})
 	require.NoError(t, err)
 	assertJSON(t, vals, `{"parent_id":false,"country_id":3,"sequence":0}`)
@@ -66,7 +66,7 @@ func TestUpdateRecord(t *testing.T) {
 	name := "B"
 	err := client.updateRecord(context.Background(), "res.partner", 7,
 		struct {
-			Name *string `json:"name,omitempty"`
+			Name *string `json:"name,omitzero"`
 		}{&name}, ErrPartnerNotFound)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"/json/2/res.partner/search_read", "/json/2/res.partner/write"}, paths)
@@ -83,7 +83,7 @@ func TestUpdateRecordRejectsWithoutWriting(t *testing.T) {
 	})
 	name := "B"
 	patch := struct {
-		Name *string `json:"name,omitempty"`
+		Name *string `json:"name,omitzero"`
 	}{&name}
 
 	err := client.updateRecord(context.Background(), "res.partner", 7, patch, ErrPartnerNotFound)
@@ -91,7 +91,7 @@ func TestUpdateRecordRejectsWithoutWriting(t *testing.T) {
 	err = client.updateRecord(context.Background(), "res.partner", 0, patch, ErrPartnerNotFound)
 	assert.ErrorIs(t, err, ErrInvalidArgument)
 	err = client.updateRecord(context.Background(), "res.partner", 7, struct {
-		Name *string `json:"name,omitempty"`
+		Name *string `json:"name,omitzero"`
 	}{}, ErrPartnerNotFound)
 	assert.ErrorIs(t, err, ErrInvalidArgument)
 	assert.Zero(t, writes)

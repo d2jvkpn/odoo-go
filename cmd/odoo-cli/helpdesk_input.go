@@ -2,9 +2,8 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
+	"errors"
 	"fmt"
-	"io"
 	"os"
 
 	"github.com/d2jvkpn/odoo-go/oca/helpdesk"
@@ -79,10 +78,8 @@ func readHelpdeskInput(opts helpdeskOptions) (helpdeskInput, error) {
 
 func decodeHelpdeskFile(path string, target any) error {
 	var (
-		data    []byte
-		decoder *json.Decoder
-		extra   any
-		err     error
+		data []byte
+		err  error
 	)
 	if path == "" {
 		return fmt.Errorf("--file is required")
@@ -94,13 +91,10 @@ func decodeHelpdeskFile(path string, target any) error {
 	if len(data) == 0 || data[0] != '{' {
 		return fmt.Errorf("%s must contain exactly one JSON object", path)
 	}
-	decoder = json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err = decoder.Decode(target); err != nil {
-		return fmt.Errorf("decode %s: %w", path, err)
-	}
-	if err = decoder.Decode(&extra); err != io.EOF {
+	if err = decodeStrict(bytes.NewReader(data), target); errors.Is(err, errNotOneObject) {
 		return fmt.Errorf("%s must contain exactly one JSON object", path)
+	} else if err != nil {
+		return fmt.Errorf("decode %s: %w", path, err)
 	}
 	return nil
 }

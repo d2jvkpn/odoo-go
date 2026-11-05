@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -25,7 +24,6 @@ func runCountries(ctx context.Context, args []string, out io.Writer) error {
 		configPath *string
 		client     *odoo.Client
 		countries  []odoo.Country
-		encoder    *json.Encoder
 	)
 
 	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" {
@@ -53,9 +51,7 @@ func runCountries(ctx context.Context, args []string, out io.Writer) error {
 	if countries, err = client.ListCountries(ctx); err != nil {
 		return err
 	}
-	encoder = json.NewEncoder(out)
-	encoder.SetIndent("", "  ")
-	if err = encoder.Encode(countries); err != nil {
+	if err = printJSON(out, countries); err != nil {
 		return fmt.Errorf("write countries: %w", err)
 	}
 	return nil

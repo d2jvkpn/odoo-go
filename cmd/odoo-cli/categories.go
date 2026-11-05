@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -40,7 +39,6 @@ func runCategories(ctx context.Context, args []string, out io.Writer) error {
 		countValue     int
 		client         *odoo.Client
 		result         any
-		encoder        *json.Encoder
 		err            error
 	)
 
@@ -131,9 +129,7 @@ func runCategories(ctx context.Context, args []string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	encoder = json.NewEncoder(out)
-	encoder.SetIndent("", "  ")
-	if err = encoder.Encode(result); err != nil {
+	if err = printJSON(out, result); err != nil {
 		return fmt.Errorf("write categories: %w", err)
 	}
 	return nil
@@ -147,13 +143,11 @@ func createCategory(
 	out io.Writer,
 ) error {
 	var (
-		f       *os.File
-		decoder *json.Decoder
-		input   odoo.CreateProductCategoryRequest
-		extra   any
-		client  *odoo.Client
-		id      int
-		err     error
+		f      *os.File
+		input  odoo.CreateProductCategoryRequest
+		client *odoo.Client
+		id     int
+		err    error
 	)
 
 	if file == "" {
@@ -163,13 +157,10 @@ func createCategory(
 		return fmt.Errorf("open category file: %w", err)
 	}
 	defer f.Close()
-	decoder = json.NewDecoder(f)
-	decoder.DisallowUnknownFields()
-	if err = decoder.Decode(&input); err != nil {
-		return fmt.Errorf("decode category file: %w", err)
-	}
-	if err = decoder.Decode(&extra); err != io.EOF {
+	if err = decodeStrict(f, &input); errors.Is(err, errNotOneObject) {
 		return fmt.Errorf("category file must contain exactly one JSON object")
+	} else if err != nil {
+		return fmt.Errorf("decode category file: %w", err)
 	}
 	if client, err = odoo.LoadClient(configPath); err != nil {
 		return err

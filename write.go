@@ -2,12 +2,12 @@ package odoo
 
 import (
 	"context"
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 	"strings"
 )
 
-// patchValues encodes a patch struct into Odoo write values. Fields tagged omitempty and left nil are
+// patchValues encodes a patch struct into Odoo write values. Pointer fields tagged omitzero and left nil are
 // dropped, and a zero value for a *_id relation is sent as false; a patch that sets nothing is rejected so no empty write is ever sent.
 func patchValues(patch any) (map[string]any, error) {
 	var (
@@ -16,10 +16,10 @@ func patchValues(patch any) (map[string]any, error) {
 		vals map[string]any
 	)
 
-	if data, err = json.Marshal(patch); err != nil {
+	if data, err = jsonv2.Marshal(patch); err != nil {
 		return nil, fmt.Errorf("encode patch: %w", err)
 	}
-	if err = json.Unmarshal(data, &vals); err != nil {
+	if err = jsonv2.Unmarshal(data, &vals); err != nil {
 		return nil, fmt.Errorf("encode patch: %w", err)
 	}
 	if len(vals) == 0 {

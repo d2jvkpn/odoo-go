@@ -12,8 +12,8 @@ import (
 // ActivityRequest describes an activity to schedule on a ticket. Zero TypeID and UserID values,
 // and empty text or deadline values, let Odoo apply the activity type and server defaults.
 type ActivityRequest struct {
-	TypeID       int    `json:"activity_type_id,omitempty"`
-	UserID       int    `json:"user_id,omitempty"`
+	TypeID       int    `json:"activity_type_id,omitzero"`
+	UserID       int    `json:"user_id,omitzero"`
 	Summary      string `json:"summary,omitempty"`
 	Note         string `json:"note,omitempty"`
 	DateDeadline string `json:"date_deadline,omitempty"`
@@ -21,11 +21,11 @@ type ActivityRequest struct {
 
 // UpdateActivityRequest changes selected fields of a ticket activity. Nil fields are unchanged.
 type UpdateActivityRequest struct {
-	TypeID       *int    `json:"activity_type_id,omitempty"`
-	UserID       *int    `json:"user_id,omitempty"`
-	Summary      *string `json:"summary,omitempty"`
-	Note         *string `json:"note,omitempty"`
-	DateDeadline *string `json:"date_deadline,omitempty"`
+	TypeID       *int    `json:"activity_type_id,omitzero"`
+	UserID       *int    `json:"user_id,omitzero"`
+	Summary      *string `json:"summary,omitzero"`
+	Note         *string `json:"note,omitzero"`
+	DateDeadline *string `json:"date_deadline,omitzero"`
 }
 
 // TicketActivity is a mail.activity attached to a helpdesk ticket.

@@ -40,35 +40,35 @@ type TicketUser struct {
 // IDs and Sequence leave Odoo's defaults in place.
 type CreateTicketCategoryRequest struct {
 	Name         string `json:"name"`
-	ParentID     int    `json:"parent_id,omitempty"`
-	CompanyID    int    `json:"company_id,omitempty"`
-	Sequence     int    `json:"sequence,omitempty"`
-	Active       *bool  `json:"active,omitempty"`
-	ShowInPortal *bool  `json:"show_in_portal,omitempty"`
+	ParentID     int    `json:"parent_id,omitzero"`
+	CompanyID    int    `json:"company_id,omitzero"`
+	Sequence     int    `json:"sequence,omitzero"`
+	Active       *bool  `json:"active,omitzero"`
+	ShowInPortal *bool  `json:"show_in_portal,omitzero"`
 }
 
 // UpdateTicketCategoryRequest changes selected category fields. A zero relation ID clears it.
 type UpdateTicketCategoryRequest struct {
-	Name         *string `json:"name,omitempty"`
-	ParentID     *int    `json:"parent_id,omitempty"`
-	CompanyID    *int    `json:"company_id,omitempty"`
-	Sequence     *int    `json:"sequence,omitempty"`
-	Active       *bool   `json:"active,omitempty"`
-	ShowInPortal *bool   `json:"show_in_portal,omitempty"`
+	Name         *string `json:"name,omitzero"`
+	ParentID     *int    `json:"parent_id,omitzero"`
+	CompanyID    *int    `json:"company_id,omitzero"`
+	Sequence     *int    `json:"sequence,omitzero"`
+	Active       *bool   `json:"active,omitzero"`
+	ShowInPortal *bool   `json:"show_in_portal,omitzero"`
 }
 
 // CreateTicketTagRequest describes a new ticket tag. Name is required.
 type CreateTicketTagRequest struct {
 	Name   string `json:"name"`
-	Color  int    `json:"color,omitempty"`
-	Active *bool  `json:"active,omitempty"`
+	Color  int    `json:"color,omitzero"`
+	Active *bool  `json:"active,omitzero"`
 }
 
 // UpdateTicketTagRequest changes selected tag fields.
 type UpdateTicketTagRequest struct {
-	Name   *string `json:"name,omitempty"`
-	Color  *int    `json:"color,omitempty"`
-	Active *bool   `json:"active,omitempty"`
+	Name   *string `json:"name,omitzero"`
+	Color  *int    `json:"color,omitzero"`
+	Active *bool   `json:"active,omitzero"`
 }
 
 func validateCreateTicketCategory(input CreateTicketCategoryRequest) error {

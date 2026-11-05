@@ -2,7 +2,8 @@ package odoo
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 	"math"
 	"strings"
@@ -28,12 +29,12 @@ type Product struct {
 	// out of the JSON output, otherwise or when Odoo has no value.
 	Template        Many2One       `json:"product_tmpl_id,omitzero"`                     // the product.template that groups sibling variants
 	DisplayName     string         `json:"display_name,omitempty"`                       // "[SKU] Name (value, value)", Odoo's variant label
-	PriceExtra      float64        `json:"price_extra,omitempty"`                        // variant price extra; the sale price is ListPrice + PriceExtra
+	PriceExtra      float64        `json:"price_extra,omitzero"`                         // variant price extra; the sale price is ListPrice + PriceExtra
 	ValueIDs        []int          `json:"product_template_variant_value_ids,omitempty"` // IDs for ProductAttributeValues
 	Barcode         OptionalString `json:"barcode,omitempty"`                            // EAN/UPC barcode; not unique across variants
 	DescriptionSale OptionalString `json:"description_sale,omitempty"`                   // sales description shown on quotations
-	Weight          float64        `json:"weight,omitempty"`                             // in the database's weight unit
-	Volume          float64        `json:"volume,omitempty"`                             // in the database's volume unit
+	Weight          float64        `json:"weight,omitzero"`                              // in the database's weight unit
+	Volume          float64        `json:"volume,omitzero"`                              // in the database's volume unit
 	UoM             Many2One       `json:"uom_id,omitzero"`                              // unit of measure
 	TaxIDs          []int          `json:"taxes_id,omitempty"`                           // customer tax IDs (account.tax)
 	Type            string         `json:"type,omitempty"`                               // "consu", "service" or "combo"
@@ -41,7 +42,7 @@ type Product struct {
 
 	// Extra holds the raw JSON of ProductQuery.ExtraFields, by field name. Decode a value with
 	// ExtraValue. It is nil when no extra field was requested.
-	Extra map[string]json.RawMessage `json:"extra,omitempty"`
+	Extra map[string]jsontext.Value `json:"extra,omitempty"`
 }
 
 // ExtraValue decodes the extra field name into a value of type T. It reports false when the field
@@ -50,14 +51,14 @@ type Product struct {
 func ExtraValue[T any](p Product, name string) (T, bool) {
 	var (
 		value T
-		raw   json.RawMessage
+		raw   jsontext.Value
 		ok    bool
 	)
 
 	if raw, ok = p.Extra[name]; !ok {
 		return value, false
 	}
-	if json.Unmarshal(raw, &value) != nil {
+	if jsonv2.Unmarshal(raw, &value) != nil {
 		var zero T
 		return zero, false
 	}
@@ -171,9 +172,9 @@ func productFields(query ProductQuery) (fields, extra []string, err error) {
 // the values of the extra fields in Product.Extra.
 func (c *Client) readProductsWithExtra(ctx context.Context, params map[string]any, extra []string, out *[]Product) error {
 	var (
-		raws   []json.RawMessage
-		fields map[string]json.RawMessage
-		raw    json.RawMessage
+		raws   []jsontext.Value
+		fields map[string]jsontext.Value
+		raw    jsontext.Value
 		p      Product
 		name   string
 		err    error
@@ -184,14 +185,14 @@ func (c *Client) readProductsWithExtra(ctx context.Context, params map[string]an
 	}
 	for _, raw = range raws {
 		p = Product{}
-		if err = json.Unmarshal(raw, &p); err != nil {
+		if err = jsonv2.Unmarshal(raw, &p); err != nil {
 			return fmt.Errorf("decode product: %w", err)
 		}
 		fields = nil
-		if err = json.Unmarshal(raw, &fields); err != nil {
+		if err = jsonv2.Unmarshal(raw, &fields); err != nil {
 			return fmt.Errorf("decode product fields: %w", err)
 		}
-		p.Extra = make(map[string]json.RawMessage, len(extra))
+		p.Extra = make(map[string]jsontext.Value, len(extra))
 		for _, name = range extra {
 			p.Extra[name] = fields[name]
 		}
@@ -228,13 +229,13 @@ func (c *Client) GetProduct(ctx context.Context, id int) (*Product, error) {
 // default category.
 type CreateProductRequest struct {
 	Name        string   `json:"name"`                   // required, not blank
-	ListPrice   *float64 `json:"list_price,omitempty"`   // optional; finite and >= 0; nil keeps Odoo's default
+	ListPrice   *float64 `json:"list_price,omitzero"`    // optional; finite and >= 0; nil keeps Odoo's default
 	DefaultCode string   `json:"default_code,omitempty"` // optional internal reference (SKU)
-	CategoryID  int      `json:"categ_id,omitempty"`     // optional product.category ID; >= 0
-	SaleOK      *bool    `json:"sale_ok,omitempty"`      // optional; nil keeps Odoo's default (sellable)
+	CategoryID  int      `json:"categ_id,omitzero"`      // optional product.category ID; >= 0
+	SaleOK      *bool    `json:"sale_ok,omitzero"`       // optional; nil keeps Odoo's default (sellable)
 	// IsStorable turns on inventory tracking (Odoo "Track Inventory"). Without it the product has no
 	// stock and SetProductStock refuses it. Nil leaves Odoo's default, which is off.
-	IsStorable *bool `json:"is_storable,omitempty"`
+	IsStorable *bool `json:"is_storable,omitzero"`
 }
 
 // validateCreateProduct checks the request shape and numeric bounds. Odoo-side rules are left to the server.
@@ -298,12 +299,12 @@ func (c *Client) CreateProduct(ctx context.Context, input CreateProductRequest) 
 // one variant changes every sibling variant; only DefaultCode is per variant. Nil fields are left
 // unchanged; a pointer to zero or false is sent explicitly. Name, if set, must not be blank.
 type UpdateProductRequest struct {
-	Name        *string  `json:"name,omitempty"`         // new display name
-	ListPrice   *float64 `json:"list_price,omitempty"`   // new template base price
-	DefaultCode *string  `json:"default_code,omitempty"` // new internal reference; "" clears it
-	CategoryID  *int     `json:"categ_id,omitempty"`     // new product.category ID
-	SaleOK      *bool    `json:"sale_ok,omitempty"`      // whether the product can be sold
-	IsStorable  *bool    `json:"is_storable,omitempty"`  // whether inventory is tracked
+	Name        *string  `json:"name,omitzero"`         // new display name
+	ListPrice   *float64 `json:"list_price,omitzero"`   // new template base price
+	DefaultCode *string  `json:"default_code,omitzero"` // new internal reference; "" clears it
+	CategoryID  *int     `json:"categ_id,omitzero"`     // new product.category ID
+	SaleOK      *bool    `json:"sale_ok,omitzero"`      // whether the product can be sold
+	IsStorable  *bool    `json:"is_storable,omitzero"`  // whether inventory is tracked
 }
 
 // UpdateProduct changes one product. It returns ErrProductNotFound for an unknown ID and does not
