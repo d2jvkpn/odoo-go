@@ -30,6 +30,7 @@
       "name": "Green Tea 100g",
       "product_uom_qty": 2,
       "price_unit": 25,
+      "discount": 0,
       "price_subtotal": 50,
       "display_type": ""
     },
@@ -42,6 +43,7 @@
       "name": "Black Tea 100g",
       "product_uom_qty": 5,
       "price_unit": 20,
+      "discount": 0,
       "price_subtotal": 100,
       "display_type": ""
     }

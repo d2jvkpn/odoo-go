@@ -2,11 +2,10 @@ package odoo
 
 import (
 	"context"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"math"
-	"strconv"
-	"strings"
 
 	"github.com/go-playground/validator/v10"
 )
@@ -50,7 +49,8 @@ type SaleOrderLine struct {
 	Name          string         `json:"name"`            // line description
 	Quantity      float64        `json:"product_uom_qty"` // in the product's default unit of measure
 	UnitPrice     float64        `json:"price_unit"`      // per unit, before tax
-	PriceSubtotal float64        `json:"price_subtotal"`  // line total before tax
+	Discount      float64        `json:"discount"`        // percent off the unit price, 0 to 100
+	PriceSubtotal float64        `json:"price_subtotal"`  // line total before tax, after the discount
 	DisplayType   OptionalString `json:"display_type"`    // "line_section" or "line_note"; empty for products
 }
 
@@ -127,7 +127,8 @@ func (c *Client) GetSaleOrder(ctx context.Context, id int) (*SaleOrder, error) {
 		err = c.CallRead(ctx, "sale.order.line", "read", map[string]any{
 			"ids": order.LineIDs,
 			"fields": []string{
-				"id", "product_id", "name", "product_uom_qty", "price_unit", "price_subtotal", "display_type",
+				"id", "product_id", "name", "product_uom_qty", "price_unit", "discount", "price_subtotal",
+				"display_type",
 			},
 		}, &order.Lines)
 		if err != nil {
@@ -151,19 +152,33 @@ type CreateSaleOrderRequest struct {
 	// PartnerID with type delivery/invoice); when zero Odoo derives them from PartnerID.
 	PartnerShippingID int                   `json:"partner_shipping_id,omitzero" validate:"gte=0"`
 	PartnerInvoiceID  int                   `json:"partner_invoice_id,omitzero"  validate:"gte=0"`
-	ClientOrderRef    string                `json:"client_order_ref,omitempty"`                       // e.g. "web-1001"
-	Origin            string                `json:"origin,omitempty"`                                 // e.g. "web"
-	Note              string                `json:"note,omitempty"`                                   // HTML, e.g. "<p>Delivery within 3 days</p>"
-	Lines             []CreateSaleOrderLine `json:"lines"                      validate:"min=1,dive"` // required
+	ClientOrderRef    string                `json:"client_order_ref,omitempty"`                  // e.g. "web-1001"
+	Origin            string                `json:"origin,omitempty"`                            // e.g. "web"
+	Note              string                `json:"note,omitempty"`                              // HTML, e.g. "<p>Delivery within 3 days</p>"
+	Lines             []CreateSaleOrderLine `json:"lines"                      validate:"min=1"` // required
 }
 
-// CreateSaleOrderLine references a product.product variant. Quantity uses the
-// product's default unit of measure. Nil UnitPrice lets Odoo compute the price;
-// a pointer to zero explicitly creates a free line.
+// Values of SaleOrderLine.DisplayType and CreateSaleOrderLine.DisplayType for lines that are not products.
+const (
+	LineSection = "line_section" // a heading that groups the lines below it
+	LineNote    = "line_note"    // a free-text remark
+)
+
+// CreateSaleOrderLine is one line of a new order. It is a product line, a section or a note.
+//
+// A product line (DisplayType empty) references a product.product variant: ProductID and Quantity are
+// required, Quantity uses the product's default unit of measure and may be negative for a return, and Name optionally overrides the line
+// description. Nil UnitPrice lets Odoo compute the price; a pointer to zero explicitly creates a free line, and a negative price gives a credit or price-difference line. Discount is a percentage taken off the unit price; nil leaves Odoo's default of 0.
+//
+// A section or a note (DisplayType LineSection or LineNote) carries only Name, which must not be empty.
+// ProductID, Quantity, UnitPrice and Discount must be left unset. Lines keep the order they are given in.
 type CreateSaleOrderLine struct {
-	ProductID int      `json:"product_id"           validate:"gt=0"`           // required
-	Quantity  float64  `json:"product_uom_qty"      validate:"gt=0"`           // required
-	UnitPrice *float64 `json:"price_unit,omitzero" validate:"omitempty,gte=0"` // optional, >= 0
+	DisplayType string   `json:"display_type,omitempty"`   // "", LineSection or LineNote
+	Name        string   `json:"name,omitempty"`           // required for sections and notes
+	ProductID   int      `json:"product_id,omitzero"`      // required for product lines
+	Quantity    float64  `json:"product_uom_qty,omitzero"` // required for product lines, nonzero; negative for a return
+	UnitPrice   *float64 `json:"price_unit,omitzero"`      // optional, may be negative
+	Discount    *float64 `json:"discount,omitzero"`        // optional percent off the unit price, 0 to 100
 }
 
 // validateCreateSaleOrder checks the request shape and numeric bounds. Odoo-side rules are left to the server.
@@ -188,44 +203,57 @@ func validateCreateSaleOrder(input CreateSaleOrderRequest) error {
 			return invalidArgument("pricelist_id must not be negative")
 		case "Lines":
 			return invalidArgument("at least one order line is required")
-		case "ProductID":
-			return invalidArgument("line %s product_id must be positive", lineNumber(e))
-		case "Quantity":
-			return invalidArgument("line %s quantity must be finite and positive", lineNumber(e))
+		case "PartnerShippingID":
+			return invalidArgument("partner_shipping_id must not be negative")
+		case "PartnerInvoiceID":
+			return invalidArgument("partner_invoice_id must not be negative")
 		default:
-			return invalidArgument("line %s price must be finite and nonnegative", lineNumber(e))
+			return fmt.Errorf("validate order: %w", err)
 		}
 	}
 	for i, line = range input.Lines {
-		if math.IsInf(line.Quantity, 0) {
-			return invalidArgument("line %d quantity must be finite and positive", i+1)
-		}
-		if line.UnitPrice != nil && math.IsInf(*line.UnitPrice, 0) {
-			return invalidArgument("line %d price must be finite and nonnegative", i+1)
+		if err = validateOrderLine(i+1, line); err != nil {
+			return err
 		}
 	}
 	return nil
 }
 
-// lineNumber extracts the 1-based line number from a namespace such as "CreateSaleOrderRequest.Lines[0].Quantity".
-func lineNumber(e validator.FieldError) string {
-	var (
-		ns         string
-		start, end int
-		index      int
-		err        error
-	)
+func finite(v float64) bool { return !math.IsNaN(v) && !math.IsInf(v, 0) }
 
-	ns = e.Namespace()
-	start = strings.Index(ns, "[")
-	end = strings.Index(ns, "]")
-	if start < 0 || end < start {
-		return "?"
+// validDiscount reports whether v is a percentage from 0 to 100; NaN fails both comparisons.
+func validDiscount(v float64) bool { return v >= 0 && v <= 100 }
+
+func finiteNonZero(v float64) bool { return finite(v) && v != 0 }
+
+// validateOrderLine checks one line, numbered from 1 in messages, according to its DisplayType.
+func validateOrderLine(n int, line CreateSaleOrderLine) error {
+	switch line.DisplayType {
+	case "":
+		if line.ProductID <= 0 {
+			return invalidArgument("line %d product_id must be positive", n)
+		}
+		if !finiteNonZero(line.Quantity) {
+			return invalidArgument("line %d quantity must be finite and nonzero", n)
+		}
+		if line.UnitPrice != nil && !finite(*line.UnitPrice) {
+			return invalidArgument("line %d price must be finite", n)
+		}
+		if line.Discount != nil && !validDiscount(*line.Discount) {
+			return invalidArgument("line %d discount must be between 0 and 100", n)
+		}
+	case LineSection, LineNote:
+		if line.Name == "" {
+			return invalidArgument("line %d %s needs a name", n, line.DisplayType)
+		}
+		if line.ProductID != 0 || line.Quantity != 0 || line.UnitPrice != nil ||
+			line.Discount != nil {
+			return invalidArgument("line %d %s must not set product_id, quantity, price or discount", n, line.DisplayType)
+		}
+	default:
+		return invalidArgument("line %d display_type must be empty, %q or %q", n, LineSection, LineNote)
 	}
-	if index, err = strconv.Atoi(ns[start+1 : end]); err != nil {
-		return "?"
-	}
-	return strconv.Itoa(index + 1)
+	return nil
 }
 
 // CreateSaleOrder creates one draft quotation and its lines in one API
@@ -360,11 +388,152 @@ type UpdateSaleOrderRequest struct {
 	ClientOrderRef *string `json:"client_order_ref,omitzero"` // customer reference
 	Origin         *string `json:"origin,omitzero"`           // source document
 	Note           *string `json:"note,omitzero"`             // terms and conditions, HTML
+	// Lines adds, edits or removes order lines; nil leaves the lines alone.
+	Lines *SaleOrderLineChanges `json:"order_line,omitzero"`
 }
 
-// UpdateSaleOrder changes the customer reference, source document, or note of one order. It returns
-// ErrSaleOrderNotFound for an unknown ID and does not retry. Odoo may refuse the change on a locked or
-// cancelled order; that error passes through as an *HTTPError.
+// SaleOrderLineChanges edits the lines of an existing order. At least one of the three lists must be
+// non-empty. Odoo may refuse line edits once the order is confirmed or locked; that error passes through as
+// an *HTTPError.
+type SaleOrderLineChanges struct {
+	Add    []CreateSaleOrderLine `json:"add,omitempty"`    // new product lines, sections and notes, appended after the existing lines
+	Update []UpdateSaleOrderLine `json:"update,omitempty"` // changes to existing lines, by line ID
+	Remove []int                 `json:"remove,omitempty"` // IDs of lines to delete
+}
+
+// UpdateSaleOrderLine changes one existing line of the order. ID is required and at least one other field
+// must be set. A line's product and its section or note type cannot be changed; remove it and add a new one.
+// A pointer to zero UnitPrice makes the line free; Quantity may be negative but not zero.
+type UpdateSaleOrderLine struct {
+	ID        int      `json:"id"`
+	Name      *string  `json:"name,omitzero"`            // description, heading or note text; not empty
+	Quantity  *float64 `json:"product_uom_qty,omitzero"` // product lines only; finite and nonzero, negative for a return
+	UnitPrice *float64 `json:"price_unit,omitzero"`      // product lines only; finite, negative for a credit
+	Discount  *float64 `json:"discount,omitzero"`        // product lines only; percent, 0 to 100; a pointer to 0 clears it
+}
+
+// MarshalJSON encodes the changes as the Odoo one2many command list for order_line:
+// [1, id, values] updates a line, [2, id] deletes it and [0, 0, values] creates one.
+func (c SaleOrderLineChanges) MarshalJSON() ([]byte, error) {
+	var commands = make([]any, 0, len(c.Update)+len(c.Remove)+len(c.Add))
+
+	for _, line := range c.Update {
+		commands = append(commands, []any{1, line.ID, struct {
+			Name      *string  `json:"name,omitzero"`
+			Quantity  *float64 `json:"product_uom_qty,omitzero"`
+			UnitPrice *float64 `json:"price_unit,omitzero"`
+			Discount  *float64 `json:"discount,omitzero"`
+		}{line.Name, line.Quantity, line.UnitPrice, line.Discount}})
+	}
+	for _, lineID := range c.Remove {
+		commands = append(commands, []any{2, lineID})
+	}
+	for _, line := range c.Add {
+		commands = append(commands, []any{0, 0, line})
+	}
+	return jsonv2.Marshal(commands)
+}
+
+// validate checks the shape of the changes. Whether the line IDs belong to the order is checked against Odoo.
+func (c SaleOrderLineChanges) validate() error {
+	var (
+		err  error
+		seen = map[int]bool{}
+	)
+
+	if len(c.Add)+len(c.Update)+len(c.Remove) == 0 {
+		return invalidArgument("line changes must add, update or remove at least one line")
+	}
+	for i, line := range c.Add {
+		if err = validateOrderLine(i+1, line); err != nil {
+			return fmt.Errorf("added %w", err)
+		}
+	}
+	for i, line := range c.Update {
+		if line.ID <= 0 {
+			return invalidArgument("updated line %d ID must be positive", i+1)
+		}
+		if seen[line.ID] {
+			return invalidArgument("line %d is changed more than once", line.ID)
+		}
+		seen[line.ID] = true
+		if line.Name == nil && line.Quantity == nil && line.UnitPrice == nil && line.Discount == nil {
+			return invalidArgument("updated line %d must set at least one field", line.ID)
+		}
+		if line.Name != nil && *line.Name == "" {
+			return invalidArgument("updated line %d name must not be empty", line.ID)
+		}
+		if line.Quantity != nil && !finiteNonZero(*line.Quantity) {
+			return invalidArgument("updated line %d quantity must be finite and nonzero", line.ID)
+		}
+		if line.UnitPrice != nil && !finite(*line.UnitPrice) {
+			return invalidArgument("updated line %d price must be finite", line.ID)
+		}
+		if line.Discount != nil && !validDiscount(*line.Discount) {
+			return invalidArgument("updated line %d discount must be between 0 and 100", line.ID)
+		}
+	}
+	for _, lineID := range c.Remove {
+		if lineID <= 0 {
+			return invalidArgument("removed line ID must be positive")
+		}
+		if seen[lineID] {
+			return invalidArgument("line %d is changed more than once", lineID)
+		}
+		seen[lineID] = true
+	}
+	return nil
+}
+
+// UpdateSaleOrder changes the customer reference, source document, note or lines of one order. It returns
+// ErrSaleOrderNotFound for an unknown ID and does not retry. When lines are changed, every line ID must
+// belong to the order, otherwise ErrInvalidArgument is returned and nothing is written. Odoo may refuse the
+// change on a locked or cancelled order; that error passes through as an *HTTPError.
 func (c *Client) UpdateSaleOrder(ctx context.Context, id int, patch UpdateSaleOrderRequest) error {
-	return c.updateRecord(ctx, "sale.order", id, patch, ErrSaleOrderNotFound)
+	var (
+		err  error
+		vals map[string]any
+		rows []struct {
+			LineIDs []int `json:"order_line"`
+		}
+		own     = map[int]bool{}
+		lineIDs []int
+	)
+
+	if patch.Lines == nil {
+		return c.updateRecord(ctx, "sale.order", id, patch, ErrSaleOrderNotFound)
+	}
+	if id <= 0 {
+		return invalidArgument("sale.order ID must be positive")
+	}
+	if err = patch.Lines.validate(); err != nil {
+		return err
+	}
+	if vals, err = patchValues(patch); err != nil {
+		return err
+	}
+	err = c.CallRead(ctx, "sale.order", "search_read", map[string]any{
+		"domain": []any{[]any{"id", "=", id}},
+		"fields": []string{"order_line"},
+		"limit":  1,
+	}, &rows)
+	if err != nil {
+		return fmt.Errorf("read sales order %d lines: %w", id, err)
+	}
+	if len(rows) == 0 {
+		return fmt.Errorf("%w: %d", ErrSaleOrderNotFound, id)
+	}
+	for _, lineID := range rows[0].LineIDs {
+		own[lineID] = true
+	}
+	for _, line := range patch.Lines.Update {
+		lineIDs = append(lineIDs, line.ID)
+	}
+	lineIDs = append(lineIDs, patch.Lines.Remove...)
+	for _, lineID := range lineIDs {
+		if !own[lineID] {
+			return invalidArgument("line %d does not belong to sales order %d", lineID, id)
+		}
+	}
+	return c.writeRecord(ctx, "sale.order", id, vals)
 }

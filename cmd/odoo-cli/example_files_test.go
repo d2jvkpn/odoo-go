@@ -51,9 +51,9 @@ func TestExampleResponseFilesMatchCLIOutput(t *testing.T) {
 				`"partner_shipping_id":[16,"Azure Interior, Delivery"],"partner_invoice_id":[15,"Azure Interior"]}]`)
 		case strings.HasSuffix(r.URL.Path, "sale.order.line/read"):
 			fmt.Fprint(w, `[{"id":11,"product_id":[101,"Green Tea 100g"],"name":"Green Tea 100g",`+
-				`"product_uom_qty":2,"price_unit":25,"price_subtotal":50,"display_type":false},`+
+				`"product_uom_qty":2,"price_unit":25,"discount":0,"price_subtotal":50,"display_type":false},`+
 				`{"id":12,"product_id":[102,"Black Tea 100g"],"name":"Black Tea 100g",`+
-				`"product_uom_qty":5,"price_unit":20,"price_subtotal":100,"display_type":false}]`)
+				`"product_uom_qty":5,"price_unit":20,"discount":0,"price_subtotal":100,"display_type":false}]`)
 		default:
 			t.Errorf("unexpected request %s", r.URL.Path)
 			http.NotFound(w, r)

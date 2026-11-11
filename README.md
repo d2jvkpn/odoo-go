@@ -167,10 +167,17 @@ each line to a `[0, 0, {...}]` entry in `order_line`. The sample sends this body
 
 Odoo returns an ID array (for example `[42]`); the Go method turns it into a single order ID.
 
-- `lines` needs at least one entry. `product_uom_qty` must be a finite positive number and uses the
-  product's default unit of measure.
+- `lines` needs at least one entry. `product_uom_qty` must be a finite, nonzero number and uses the
+  product's default unit of measure; a negative quantity records a return.
 - When `price_unit` is omitted Odoo prices the line; an explicit `0` means a zero price. An
-  explicit unit price must be a finite non-negative number.
+  explicit unit price must be a finite number; a negative one records a credit or price difference.
+- A line is a product, a section or a note. A section or note sets `display_type` to
+  `line_section` or `line_note` and a non-empty `name`, and must not set `product_id`,
+  `product_uom_qty` or `price_unit`. Lines keep the order given. A product line may set `name` to
+  override its description. Reading an order returns the same `display_type` values.
+- `discount` is an optional percentage from 0 to 100 taken off `price_unit` (`10` means 10% off); omit
+  it for no discount. It applies to product lines only and can be set on `orders update` too. Reading
+  a line returns `discount`, so `price_subtotal` equals quantity x `price_unit` x (1 - discount / 100).
 - The optional `pricelist_id` selects a pricelist; when omitted Odoo's default applies.
 - `client_order_ref` is the customer's order reference. It is **not guaranteed unique and does not
   make creation idempotent**. After a timeout, a dropped connection or a response decoding error
@@ -305,7 +312,14 @@ go run ./cmd/odoo-cli categories update -id 7 -file patch.json
   inspect `State` before trying again. Odoo may still refuse a cancel, for example for delivered
   or invoiced orders. Orders also report `invoice_status` and `delivery_status`; the latter comes from
   Odoo's `sale_stock` module, so order reads fail on a database without it.
-- `orders update` changes only `client_order_ref`, `origin` and `note`; a pointer to `""` clears one.
+- `orders update` changes `client_order_ref`, `origin`, `note` and the order lines; a pointer to `""`
+  clears one of the first three. Line edits go under `order_line` and may combine `add` (same shape as
+  the lines of `orders create`, including sections and notes, appended after the existing lines),
+  `update` (`id` plus `name`, `product_uom_qty` and/or `price_unit`) and `remove` (line IDs):
+  `{"order_line": {"add": [{"display_type": "line_note", "name": "Fragile"}], "update":
+  [{"id": 11, "product_uom_qty": 3}], "remove": [13]}}`. Every ID must be a line of that order, or
+  nothing is written. A line's product and section or note type cannot be changed; remove it and add
+  a new one.
   Odoo may refuse the change on a locked order, which surfaces as an `*HTTPError`.
 - Updates take a patch with only the fields to change (`products update`, `categories update`,
   `partners update`, `orders update`); an empty patch or an unknown ID is an error. Only products and partners can be archived.
@@ -563,7 +577,7 @@ listed here are not read, so use `CallRead` for anything else.
 | `Product` | `product.product` | `id`, `name`, `default_code`, `list_price`, `categ_id`, `sale_ok`, `is_storable` |
 | `ProductCategory` | `product.category` / `product.public.category` | `id`, `name`, `complete_name`, `display_name`, `parent_id`, `child_id`, `parent_path` |
 | `SaleOrder` | `sale.order` | `id`, `name`, `partner_id`, `date_order`, `state`, `amount_untaxed`, `amount_tax`, `amount_total`, `currency_id`, `client_order_ref`, `invoice_status`, `delivery_status`, `origin`, `note`, `order_line` |
-| `SaleOrderLine` | `sale.order.line` | `id`, `product_id`, `name`, `product_uom_qty`, `price_unit`, `price_subtotal`, `display_type` |
+| `SaleOrderLine` | `sale.order.line` | `id`, `product_id`, `name`, `product_uom_qty`, `price_unit`, `discount`, `price_subtotal`, `display_type` |
 | `Partner` | `res.partner` | `id`, `name`, `email`, `phone`, `ref`, `street`, `street2`, `city`, `zip`, `state_id`, `country_id`, `website`, `is_company`, `type`, `parent_id`, `function`, `vat`, `company_registry`, `lang`, `comment`, `category_id`, `user_id`, `company_id`, `barcode`, `industry_id`, `create_date`, `write_date` |
 | `PartnerTag` | `res.partner.category` | `id`, `name`, `display_name` |
 | `Country` | `res.country` | `id`, `name`, `code` |

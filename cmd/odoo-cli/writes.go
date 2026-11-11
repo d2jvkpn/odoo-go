@@ -168,7 +168,7 @@ func runCategoryUpdate(ctx context.Context, args []string, out io.Writer) error 
 	}{*id})
 }
 
-// runOrderUpdate handles `orders update`: change client_order_ref, origin or note of one order.
+// runOrderUpdate handles `orders update`: change client_order_ref, origin, note or the lines of one order.
 func runOrderUpdate(ctx context.Context, args []string, out io.Writer) error {
 	var (
 		err    error

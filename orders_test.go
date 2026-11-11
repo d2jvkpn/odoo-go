@@ -137,9 +137,9 @@ func TestGetSaleOrderIncludesLines(t *testing.T) {
 		case "/json/2/sale.order.line/read":
 			assertJSON(t, params["ids"], "[11,12]")
 			assertJSON(t, params["fields"],
-				`["id","product_id","name","product_uom_qty","price_unit","price_subtotal","display_type"]`)
+				`["id","product_id","name","product_uom_qty","price_unit","discount","price_subtotal","display_type"]`)
 			fmt.Fprint(w, `[{"id":11,"product_id":[3,"Desk"],"name":"Desk","product_uom_qty":2,"price_unit":10,`+
-				`"price_subtotal":20,"display_type":false},{"id":12,"product_id":false,"name":"Notes",`+
+				`"discount":12.5,"price_subtotal":17.5,"display_type":false},{"id":12,"product_id":false,"name":"Notes",`+
 				`"product_uom_qty":0,"price_unit":0,"price_subtotal":0,"display_type":"line_note"}]`)
 		default:
 			assert.Failf(t, "unexpected path", "path = %s", r.URL.Path)
@@ -152,6 +152,8 @@ func TestGetSaleOrderIncludesLines(t *testing.T) {
 	assert.Equal(t, 2, calls)
 	require.Len(t, order.Lines, 2)
 	assert.Equal(t, 3, order.Lines[0].Product.ID)
+	assert.Equal(t, 12.5, order.Lines[0].Discount)
+	assert.Equal(t, 17.5, order.Lines[0].PriceSubtotal)
 	assert.Equal(t, float64(2), order.Lines[0].Quantity)
 	assert.Equal(t, 0, order.Lines[1].Product.ID)
 	assert.Equal(t, "line_note", string(order.Lines[1].DisplayType))
@@ -229,6 +231,122 @@ func TestCreateSaleOrder(t *testing.T) {
 	assert.Equal(t, 1, calls)
 }
 
+func TestCreateSaleOrderSectionsAndNotes(t *testing.T) {
+	var (
+		client *Client
+		id     int
+		err    error
+	)
+
+	client = orderTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/json/2/sale.order/create", r.URL.Path)
+		assertJSON(t, requestParams(t, r), `{"vals_list":[{"partner_id":7,"order_line":[`+
+			`[0,0,{"display_type":"line_section","name":"Hardware"}],`+
+			`[0,0,{"name":"Desk (oak)","product_id":3,"product_uom_qty":2}],`+
+			`[0,0,{"display_type":"line_note","name":"Delivery within 3 days"}]]}]}`)
+		fmt.Fprint(w, "[42]")
+	})
+
+	id, err = client.CreateSaleOrder(context.Background(), CreateSaleOrderRequest{
+		PartnerID: 7,
+		Lines: []CreateSaleOrderLine{
+			{DisplayType: LineSection, Name: "Hardware"},
+			{Name: "Desk (oak)", ProductID: 3, Quantity: 2},
+			{DisplayType: LineNote, Name: "Delivery within 3 days"},
+		},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 42, id)
+}
+
+func TestCreateSaleOrderRejectsInvalidSectionsAndNotes(t *testing.T) {
+	var (
+		client *Client
+		price  float64
+		err    error
+	)
+
+	client = orderTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		assert.Fail(t, "invalid input reached server")
+		fmt.Fprint(w, "[]")
+	})
+
+	for _, line := range []CreateSaleOrderLine{
+		{DisplayType: LineSection},
+		{DisplayType: LineNote, Name: ""},
+		{DisplayType: LineSection, Name: "A", ProductID: 3},
+		{DisplayType: LineNote, Name: "A", Quantity: 1},
+		{DisplayType: LineNote, Name: "A", UnitPrice: &price},
+		{DisplayType: "bogus", Name: "A"},
+	} {
+		_, err = client.CreateSaleOrder(context.Background(), CreateSaleOrderRequest{
+			PartnerID: 7, Lines: []CreateSaleOrderLine{{ProductID: 3, Quantity: 1}, line},
+		})
+		require.ErrorIs(t, err, ErrInvalidArgument, "accepted %+v", line)
+		assert.Contains(t, err.Error(), "line 2")
+	}
+}
+
+func TestCreateSaleOrderReturnsAndCredits(t *testing.T) {
+	var (
+		client *Client
+		credit = -5.0
+		err    error
+	)
+
+	client = orderTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		assertJSON(t, requestParams(t, r), `{"vals_list":[{"partner_id":7,"order_line":[`+
+			`[0,0,{"product_id":3,"product_uom_qty":-2}],`+
+			`[0,0,{"product_id":4,"product_uom_qty":1,"price_unit":-5}]]}]}`)
+		fmt.Fprint(w, "[42]")
+	})
+
+	_, err = client.CreateSaleOrder(context.Background(), CreateSaleOrderRequest{
+		PartnerID: 7,
+		Lines: []CreateSaleOrderLine{
+			{ProductID: 3, Quantity: -2},
+			{ProductID: 4, Quantity: 1, UnitPrice: &credit},
+		},
+	})
+	require.NoError(t, err)
+}
+
+func TestCreateSaleOrderDiscount(t *testing.T) {
+	var (
+		client         *Client
+		ten, none, bad float64
+		err            error
+	)
+
+	client = orderTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		assertJSON(t, requestParams(t, r), `{"vals_list":[{"partner_id":7,"order_line":[`+
+			`[0,0,{"product_id":3,"product_uom_qty":2,"discount":10}],`+
+			`[0,0,{"product_id":4,"product_uom_qty":1,"discount":0}]]}]}`)
+		fmt.Fprint(w, "[42]")
+	})
+
+	ten, none = 10, 0
+	_, err = client.CreateSaleOrder(context.Background(), CreateSaleOrderRequest{
+		PartnerID: 7,
+		Lines: []CreateSaleOrderLine{
+			{ProductID: 3, Quantity: 2, Discount: &ten},
+			{ProductID: 4, Quantity: 1, Discount: &none},
+		},
+	})
+	require.NoError(t, err)
+
+	for _, bad = range []float64{-1, 100.5, math.NaN(), math.Inf(1)} {
+		_, err = client.CreateSaleOrder(context.Background(), CreateSaleOrderRequest{
+			PartnerID: 7, Lines: []CreateSaleOrderLine{{ProductID: 3, Quantity: 1, Discount: &bad}},
+		})
+		assert.ErrorIs(t, err, ErrInvalidArgument, "accepted discount %v", bad)
+	}
+	_, err = client.CreateSaleOrder(context.Background(), CreateSaleOrderRequest{
+		PartnerID: 7, Lines: []CreateSaleOrderLine{{DisplayType: LineNote, Name: "n", Discount: &ten}},
+	})
+	assert.ErrorIs(t, err, ErrInvalidArgument)
+}
+
 func TestCreateSaleOrderDefaults(t *testing.T) {
 	var (
 		client *Client
@@ -261,11 +379,11 @@ func TestCreateSaleOrderDefaults(t *testing.T) {
 
 func TestOrderValidationDoesNotSendRequests(t *testing.T) {
 	var (
-		client                       *Client
-		badPrice, nanPrice, infPrice float64
-		validLine                    CreateSaleOrderLine
-		id                           int
-		err                          error
+		client             *Client
+		nanPrice, infPrice float64
+		validLine          CreateSaleOrderLine
+		id                 int
+		err                error
 	)
 
 	client = orderTestClient(t, func(w http.ResponseWriter, r *http.Request) {
@@ -282,7 +400,7 @@ func TestOrderValidationDoesNotSendRequests(t *testing.T) {
 		assert.Error(t, err, "accepted invalid ID %d", orderID)
 	}
 
-	badPrice, nanPrice, infPrice = -1.0, math.NaN(), math.Inf(1)
+	nanPrice, infPrice = math.NaN(), math.Inf(1)
 	validLine = CreateSaleOrderLine{ProductID: 3, Quantity: 1}
 
 	for _, input := range []CreateSaleOrderRequest{
@@ -292,10 +410,8 @@ func TestOrderValidationDoesNotSendRequests(t *testing.T) {
 		{PartnerID: 7, PricelistID: -1, Lines: []CreateSaleOrderLine{validLine}},
 		{PartnerID: 7, Lines: []CreateSaleOrderLine{{ProductID: 0, Quantity: 1}}},
 		{PartnerID: 7, Lines: []CreateSaleOrderLine{{ProductID: 3, Quantity: 0}}},
-		{PartnerID: 7, Lines: []CreateSaleOrderLine{{ProductID: 3, Quantity: -1}}},
 		{PartnerID: 7, Lines: []CreateSaleOrderLine{{ProductID: 3, Quantity: math.NaN()}}},
 		{PartnerID: 7, Lines: []CreateSaleOrderLine{{ProductID: 3, Quantity: math.Inf(1)}}},
-		{PartnerID: 7, Lines: []CreateSaleOrderLine{{ProductID: 3, Quantity: 1, UnitPrice: &badPrice}}},
 		{PartnerID: 7, Lines: []CreateSaleOrderLine{{ProductID: 3, Quantity: 1, UnitPrice: &nanPrice}}},
 		{PartnerID: 7, Lines: []CreateSaleOrderLine{{ProductID: 3, Quantity: 1, UnitPrice: &infPrice}}},
 	} {
