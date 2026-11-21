@@ -54,10 +54,12 @@
 
 - [README.md](../README.md): CLI and Go API usage, with examples for every endpoint.
 - [helpdesk.md](helpdesk.md): core helpdesk SDK/CLI operations, inputs and module requirements.
-- [catalog-sync.md](catalog-sync.md): `odoo-sync` export and import of products and BOMs between databases.
+- [catalog-sync.md](catalog-sync.md): `odoo-sync` export and import of products and BOMs between
+  databases.
 - [order-flow.md](order-flow.md): placing orders with several shipping addresses per customer, and
   creating child address contacts idempotently.
 - [modules.md](modules.md): Odoo modules each feature depends on, by technical and Apps name.
-- [manual-testing.md](manual-testing.md): CLI checks against a live Odoo server, read-only plus
-  order, helpdesk and `odoo-sync` write tests for a test database.
+- [manual-testing.md](manual-testing.md): checks against a live Odoo server for the whole SDK, the
+  `odoo-cli` commands and `cmd/odoo-sync`: read-only steps plus order, helpdesk and `odoo-sync`
+  write tests for a test database.
 - `records/` holds workflow output (plans, specs, reviews) and is deliberately not indexed.

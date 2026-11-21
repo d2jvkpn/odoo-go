@@ -2,43 +2,58 @@
 
 ## What this repo is
 
-This Go 1.27 module, `github.com/d2jvkpn/odoo-go`, is a Go SDK for the Odoo JSON-2 API. It provides a
-typed client (products, product categories, sales orders) and the `odoo-cli` command line tool.
+This Go 1.27 module, `github.com/d2jvkpn/odoo-go`, is a Go SDK for the Odoo JSON-2 API. It provides
+a typed client for products and variants, product categories, sales orders and their fulfillment,
+partners, countries, stock and bills of materials, plus helpdesk tickets through the OCA addon. It
+ships two command line tools: `odoo-cli` for querying and writing records, and `odoo-sync` for
+copying products and BOMs between databases.
 
 ## Project Layout
 
-- `*.go` (repo root, package `odoo`): HTTP client, YAML configuration loading, sales orders,
-  category queries, and relation decoding.
-- `cmd/odoo-cli/`: unified business commands, including `helpdesk`. Keep argument parsing
-  and output here; reusable API behavior belongs in the root `odoo` package.
-- `cmd/odoo-sync/`: exports products and BOMs from one Odoo database and imports them into another. Keep
-  argument parsing, planning and output here; reusable API behavior belongs in the root package.
-- `oca/helpdesk/`: OCA helpdesk lifecycle, metadata, messages, attachments, followers and
-  activities, supplementing the root `odoo` package.
-- Tests live beside implementation files as `*_test.go`.
-- `examples/`: sample request files (`product.json`, `sale-order.json`) and the matching CLI output
-  (`*.response.json`); `README.md`: usage documentation.
-- `configs/local.yaml`: local connection configuration. `docs/`: harness docs;
-  `docs/records/superpowers/`: design specs and implementation plans.
-- `target/`: generated build artifacts; excluded from version control.
+```text
+.
+├── AGENTS.md             — coding-agent instructions: repo layout, commands, and doc `@`-includes
+├── README.md             — usage: CLI examples, the Go API, errors, retries
+├── go.mod                — Go module definition (`github.com/d2jvkpn/odoo-go`)
+├── *.go                  — package `odoo`: client, config and every API call; tests beside them as `*_test.go`
+├── cmd/                  — `main` entry points; arguments and output only, reusable behavior in package `odoo`
+│   ├── odoo-cli/         — queries and writes: products, boms, orders, partners, stock, helpdesk
+│   └── odoo-sync/        — exports and imports products and BOMs between Odoo databases
+├── oca/                  — packages for OCA addons
+│   └── helpdesk/         — helpdesk tickets, messages, attachments, followers and activities
+├── docs/                 — project documentation
+│   ├── README.md         — documentation index
+│   ├── catalog-sync.md   — `odoo-sync` behavior
+│   ├── helpdesk.md       — helpdesk SDK and CLI operations
+│   ├── manual-testing.md — checks against a live Odoo
+│   ├── modules.md        — Odoo modules each feature needs
+│   └── order-flow.md     — placing orders with several shipping addresses
+├── examples/             — sample request files and the matching CLI output, checked by tests
+├── configs/              — local connection configs, `local.yaml` (git-ignored)
+├── data/                 — temporary files: manual test inputs and exports (git-ignored)
+├── target/               — build output (git-ignored)
+├── .agents/              — agent rules and workflow records (git-ignored)
+│   └── superpowers/      — design specs and implementation plans (git-ignored)
+└── .worktrees/           — git worktrees (git-ignored)
+```
 
 ## Commands
 
-Run commands from the repository root:
+Prerequisites: Go 1.27. The tests use `httptest` fakes and need no Odoo or credentials; only the
+checks in `docs/manual-testing.md` need a live server. Run commands from the repository root:
 
 ```sh
-go build -o target/odoo ./cmd/odoo-cli
-go build -o target/odoo-sync ./cmd/odoo-sync
-go test -v -count=1 ./...
-go test -race -cover ./...
-go vet ./...
-go run ./cmd/odoo-cli -h
-go run ./cmd/odoo-cli categories list
+go build -o target/odoo ./cmd/odoo-cli          # build the CLI
+go build -o target/odoo-sync ./cmd/odoo-sync    # build the sync tool
+go test -count=1 ./...                          # run every test, uncached
+go test -run TestName ./cmd/odoo-sync           # run one test in one package
+go test -race -cover ./...                      # check races and coverage
+go fmt ./... && go vet ./...                    # format and static analysis
+go run ./cmd/odoo-cli -h                        # CLI help
 ```
 
-These build the CLI into `target/`, run uncached verbose tests, check races and coverage, perform
-static analysis, display help, and query configured categories. Keep build outputs in `target/`. If
-Git metadata is unavailable, add `-buildvcs=false` to the build command.
+A task is done when `go fmt`, `go vet ./...` and `go test -race ./...` pass. Keep build outputs in
+`target/`. If Git metadata is unavailable, add `-buildvcs=false` to the build command.
 
 ## Coding Style & Naming Conventions
 
@@ -57,10 +72,10 @@ meaningful regression coverage for changed behavior.
 
 ## Commit & Pull Request Guidelines
 
-Git history is unavailable in this checkout, so existing commit conventions cannot be verified.
-Prefer focused imperative subjects, optionally scoped, such as `fix(odoo): validate category parent
-IDs`. PRs should describe the behavior change, link relevant issues, list validation commands, and
-update affected CLI examples.
+Commit subjects follow the existing history: `<type>: <imperative summary>` with a type such as
+`feat`, `fix`, `docs`, `test` or `refactor`, for example `fix: validate category parent IDs`.
+Create a commit only when the user explicitly authorizes it. PRs should describe the behavior
+change, link relevant issues, list validation commands, and update affected CLI examples.
 
 ## Security & Configuration
 
