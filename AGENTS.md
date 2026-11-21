@@ -11,6 +11,8 @@ typed client (products, product categories, sales orders) and the `odoo-cli` com
   category queries, and relation decoding.
 - `cmd/odoo-cli/`: unified business commands, including `helpdesk`. Keep argument parsing
   and output here; reusable API behavior belongs in the root `odoo` package.
+- `cmd/odoo-sync/`: exports products from one Odoo database and imports them into another. Keep
+  argument parsing, planning and output here; reusable API behavior belongs in the root package.
 - `oca/helpdesk/`: OCA helpdesk lifecycle, metadata, messages, attachments, followers and
   activities, supplementing the root `odoo` package.
 - Tests live beside implementation files as `*_test.go`.
@@ -26,6 +28,7 @@ Run commands from the repository root:
 
 ```sh
 go build -o target/odoo ./cmd/odoo-cli
+go build -o target/odoo-sync ./cmd/odoo-sync
 go test -v -count=1 ./...
 go test -race -cover ./...
 go vet ./...

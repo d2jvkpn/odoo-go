@@ -601,3 +601,8 @@ go test -v -count=1 ./...
 go test -race -cover ./...
 go test . -run Example -v
 ```
+
+## Syncing products between databases
+
+`cmd/odoo-sync` exports categories, attributes, templates and variants from one Odoo and imports
+them into another, matching by `default_code`. See [docs/catalog-sync.md](docs/catalog-sync.md).

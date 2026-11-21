@@ -21,6 +21,10 @@
   subtype distinguishes public replies from internal notes. See [helpdesk.md](helpdesk.md).
 - `cmd/odoo-cli` only parses arguments and prints JSON; reusable API behavior belongs in the root
   package.
+- `cmd/odoo-sync` exports products from one Odoo database and imports them into another, matching
+  variants by `default_code`. It uses `ListCatalogVariants`, `ListProductAttributes`, `ListUoMs`,
+  `CreateProductTemplate`, `UpdateProductTemplate`, `SetProductTemplateActive` and
+  `UpdateVariantFields` from the root package. See [catalog-sync.md](catalog-sync.md).
 - `UpsertPartnerByRef` is not safe under concurrent calls for the same ref; the SDK deliberately
   adds no locking. See
   [the decision record](../.agents/decisions/2026-10-27_evol_partner-upsert-locking.md).
@@ -49,6 +53,7 @@
 
 - [README.md](../README.md): CLI and Go API usage, with examples for every endpoint.
 - [helpdesk.md](helpdesk.md): core helpdesk SDK/CLI operations, inputs and module requirements.
+- [catalog-sync.md](catalog-sync.md): `odoo-sync` export and import of products between databases.
 - [order-flow.md](order-flow.md): placing orders with several shipping addresses per customer, and
   creating child address contacts idempotently.
 - [modules.md](modules.md): Odoo modules each feature depends on, by technical and Apps name.
