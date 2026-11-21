@@ -2,8 +2,9 @@
 
 Manual checks against a live Odoo server, for behavior the `httptest` fixtures cannot prove. Run
 every command from the repository root. All commands are read-only except those under
-[Order write tests](#order-write-tests) and [Helpdesk tests](#helpdesk-tests); never run any write
-command (`create`, `update`, `upsert`, `archive`, `stock set -yes`, `orders confirm|cancel -yes`,
+[Order write tests](#order-write-tests), [Helpdesk tests](#helpdesk-tests) and the write steps of
+[odoo-sync tests](#odoo-sync-tests); never run any write command (`create`, `update`, `upsert`,
+`archive`, `stock set -yes`, `orders confirm|cancel -yes`, `odoo-sync import` without `-dry-run`,
 and every `helpdesk` action except the reads listed there) against a database that holds real data,
 because they write records and are never retried automatically.
 
@@ -44,6 +45,9 @@ go run ./cmd/odoo-cli categories list -all -limit 20
 go run ./cmd/odoo-cli partners list -limit 5
 go run ./cmd/odoo-cli stock get -ids 1
 go run ./cmd/odoo-cli stock locations
+go run ./cmd/odoo-cli boms list          # needs the mrp module
+go run ./cmd/odoo-cli boms list -archived
+go run ./cmd/odoo-cli boms get -id 14
 ```
 
 ## Consistency checks
@@ -99,6 +103,50 @@ go run ./cmd/odoo-cli orders list -domain '[["origin","=","odoo-go-test"]]' -ord
   payment are not covered by the SDK; check them in Odoo.
 - The SDK cannot delete orders or set a partner's stock locations (shown only in Odoo developer
   mode). Clean up in the Odoo UI.
+
+## odoo-sync tests
+
+Needs two connection files (`odoo.base_url`, `odoo.api_key`, optional `odoo.db`): a source with real
+products and a **test** target, empty or disposable. Both need the sales and inventory modules, and
+BOMs need `mrp`. Keep files under `data/tests/sync/`. The unit tests use fakes, so only these steps
+show how a real Odoo behaves.
+
+Read-only steps (safe on any database as the source; `import -dry-run` writes nothing):
+
+```sh
+go build -o target/odoo-sync ./cmd/odoo-sync
+target/odoo-sync export -source configs/source.yaml -out data/tests/sync/catalog.json
+target/odoo-sync check  -in data/tests/sync/catalog.json
+target/odoo-sync import -target configs/target.yaml -in data/tests/sync/catalog.json -dry-run
+```
+
+Expected: `check` prints `ok:` with the template, variant and BOM counts; exporting twice gives the
+same file apart from `exported_at`; a dry run against the source itself proposes no product
+changes. A source BOM with operations, byproducts or attribute-restricted lines makes the export
+fail, naming the BOM. Without `mrp` the export fails; use `-include products` and note the HTTP
+status Odoo returns (404 or 500), which [modules.md](modules.md) states as 500 and is unverified.
+
+Strict mode stops on products or components without a `default_code`; confirm that the dry run
+lists them all and that `-empty-code skip` skips them and says so.
+
+Write steps, **test target only** (confirm the target before each run; the first import creates
+records that the SDK cannot delete, so clean up in the Odoo UI):
+
+1. `import ... -include products -map-out data/tests/sync/map.csv`. Check in Odoo: every template
+   has all the variants the file lists, each `default_code` is set, archived variants are archived,
+   and extra prices match the source. This is the only proof of how Odoo generates variants after
+   attribute lines are added through JSON-2, and that `SetProductActive` archives a variant.
+2. Run the same import again. Expected: no creates, updates or archives.
+3. `import ... -include boms`. Check in Odoo: each BOM has the right product (variant or template),
+   components, quantities and units. This proves the `CreateBOM` line commands.
+4. Run it again; expected `0 to create, 0 to archive, 0 code updates` and all BOMs unchanged.
+5. In the source, change a component quantity and a BOM `code`, export again and import. Expected:
+   the changed BOM is created and the old one archived (never edited), and a code-only change
+   updates the reference in place (`UpdateBOMCode`).
+6. Try an import of `-include boms` into a target that lacks a product or component: it must list
+   every missing code and write nothing.
+
+Note any Odoo behavior that differs from [catalog-sync.md](catalog-sync.md) and fix the document.
 
 ## Helpdesk tests
 

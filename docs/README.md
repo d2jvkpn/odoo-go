@@ -59,5 +59,5 @@
   creating child address contacts idempotently.
 - [modules.md](modules.md): Odoo modules each feature depends on, by technical and Apps name.
 - [manual-testing.md](manual-testing.md): CLI checks against a live Odoo server, read-only plus
-  order and helpdesk write tests for a test database.
+  order, helpdesk and `odoo-sync` write tests for a test database.
 - `records/` holds workflow output (plans, specs, reviews) and is deliberately not indexed.
