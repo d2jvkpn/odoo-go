@@ -4,7 +4,7 @@ A Go client for the
 [Odoo JSON-2 API](https://www.odoo.com/documentation/19.0/developer/reference/external_api.html)
 (available since Odoo 19). YAML configuration is loaded with `github.com/spf13/viper`.
 
-The CLI lives in `cmd/odoo-cli` and has the `products`, `orders`, `categories`, `partners`, `countries`, `stock` and `helpdesk` command groups:
+The CLI lives in `cmd/odoo-cli` and has the `products`, `boms`, `orders`, `categories`, `partners`, `countries`, `stock` and `helpdesk` command groups:
 
 ```sh
 go run ./cmd/odoo-cli -h
@@ -394,6 +394,22 @@ In the Go API, `Limit == 0` defaults to 1000 for backend categories and 100 for 
 categories, products and orders; negative paging values are errors. On the command line, omitting
 `-limit` uses those defaults and an explicit value must be positive. An empty list prints `[]`.
 Categories can be read, created and updated; the list and get endpoints do not modify data.
+
+## Querying bills of materials
+
+Needs the `mrp` module. `list` prints every bill of materials (`mrp.bom`) with its component lines;
+`-archived` includes archived ones. `get` prints one, archived or not.
+
+```sh
+go run ./cmd/odoo-cli boms list
+go run ./cmd/odoo-cli boms list -archived
+go run ./cmd/odoo-cli boms get -id 14
+```
+
+In Go, `ListBOMs` and `GetBOM` read them (`ErrBOMNotFound` for an unknown ID), `CreateBOM` creates one
+with its lines in a single request and `SetBOMActive` archives or restores it. Neither write retries.
+`BOM.OperationIDs`, `BOM.ByproductIDs` and `BOMLine.ValueIDs` (a line restricted to some variants)
+are readable, but `CreateBOM` cannot write them. A BOM for a whole template has `Variant.ID == 0`.
 
 ## Pagination and counting
 

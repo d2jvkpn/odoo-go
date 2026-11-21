@@ -15,6 +15,7 @@ import (
 
 const usage = `Usage:
   odoo [-config configs/local.yaml] products list|get|count|create|update|archive|unarchive [options]
+  odoo [-config configs/local.yaml] boms list|get [options]
   odoo [-config configs/local.yaml] orders list|get|count|create|update|confirm|cancel [options]
   odoo [-config configs/local.yaml] pickings validate [options]
   odoo [-config configs/local.yaml] categories list|get|count|create|update [options]
@@ -70,6 +71,8 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 	switch args[0] {
 	case "products":
 		command = runProducts
+	case "boms":
+		command = runBOMs
 	case "orders":
 		command = runOrders
 	case "pickings":

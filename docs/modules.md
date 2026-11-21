@@ -18,6 +18,7 @@ Odoo version or customized database can differ.
 | `product` | Products | Products, internal categories, attributes and variants |
 | `sale` | Sales | Sale orders and lines, `pricelist_id`, order confirm and cancel |
 | `sale_stock` | Sales and Warehouse Management | `delivery_status`, requested by every order read |
+| `mrp` | Manufacturing | Bills of materials (`mrp.bom`, `mrp.bom.line`), `boms` commands and BOM calls only |
 | `stock` | Inventory | `is_storable`, stock quantities and locations, `SetProductStock` |
 | `account` | Invoicing | `taxes_id`, only with `products list -details` |
 | `mail` | Discuss | Helpdesk messages, followers and activities |
@@ -41,6 +42,7 @@ only lists, creates and updates them: it has no call that assigns a product to o
 | Product read | `product.product` | `product`, `stock` (the base field list always requests `is_storable`) |
 | Product create and update | `product.template` | `product`; `stock` only when `is_storable` is set |
 | Variants (`variants.go`) | `product.attribute`, `product.attribute.value`, `product.template.attribute.line`, `product.template.attribute.value` | `product` |
+| Bills of materials (`bom.go`) | `mrp.bom`, `mrp.bom.line` | `mrp` |
 | Internal categories | `product.category` | `product` |
 | Website categories | `product.public.category` | `website_sale` |
 | Orders | `sale.order`, `sale.order.line` | `sale`, `sale_stock` |
@@ -53,6 +55,7 @@ only lists, creates and updates them: it has no call that assigns a product to o
 ## Failure modes
 
 A missing module shows up as an Odoo HTTP 500 naming the missing field or model, for example
-`Invalid field 'is_storable' on 'product.product'` when `stock` is not installed. The SDK does not
+`Invalid field 'is_storable' on 'product.product'` when `stock` is not installed, or an unknown model
+`mrp.bom` when `mrp` is not. The SDK does not
 probe for modules. Variant creation sets `create_variant=always` on new attributes; with `dynamic`
 Odoo creates variants only on first order, so none appear when the template line is added.

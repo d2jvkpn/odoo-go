@@ -16,6 +16,8 @@ var (
 
 	// ErrProductNotFound means no product visible to this user matched.
 	ErrProductNotFound = errors.New("product not found")
+	// ErrBOMNotFound means no bill of materials visible to this user matched the ID.
+	ErrBOMNotFound = errors.New("bill of materials not found")
 	// ErrProductCategoryNotFound means no category visible to this user matched.
 	ErrProductCategoryNotFound = errors.New("product category not found")
 	// ErrSaleOrderNotFound means no order visible to this API user matched the ID.
