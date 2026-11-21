@@ -27,6 +27,9 @@ type targetAPI interface {
 	UpdateVariantFields(ctx context.Context, id int, patch odoo.VariantPatch) error
 	SetProductActive(ctx context.Context, id int, active bool) error
 	SetProductTemplateActive(ctx context.Context, id int, active bool) error
+	CreateBOM(ctx context.Context, in odoo.CreateBOMRequest) (int, error)
+	SetBOMActive(ctx context.Context, id int, active bool) error
+	UpdateBOMCode(ctx context.Context, id int, code string) error
 }
 
 // MapRow relates a source variant to its target variant, by default_code.
@@ -39,9 +42,11 @@ type MapRow struct {
 
 // Result is what an import did.
 type Result struct {
-	Created, Updated, Unchanged, Archived, Skipped, Failed int
-	Map                                                    []MapRow
-	Failures, Warnings                                     []string
+	Created, Updated, Unchanged, Archived, Skipped, Failed       int
+	BOMCreated, BOMUpdated, BOMUnchanged, BOMArchived, BOMFailed int
+	BOMsRan                                                      bool
+	Map                                                          []MapRow
+	Failures, Warnings                                           []string
 }
 
 type applier struct {
@@ -83,7 +88,128 @@ func applyPlan(ctx context.Context, api targetAPI, snap *Snapshot, p *Plan) (*Re
 			a.res.Failures = append(a.res.Failures, fmt.Sprintf("template %d %q: %v", tp.Template.SourceID, tp.Template.Name, err))
 		}
 	}
+	if p.BOMs != nil {
+		if err = a.applyBOMs(ctx, snap, p.BOMs); err != nil {
+			return a.res, err
+		}
+	}
 	return a.res, nil
+}
+
+// bomProduct is a product of the target: its variant and its template.
+type bomProduct struct{ variant, template int }
+
+// applyBOMs writes the BOM plan after the products: creates first, then reference updates, then
+// archives, so a product never loses its old BOM before the new one exists. A failed create keeps the
+// old BOM of that product and is recorded; the run goes on.
+func (a *applier) applyBOMs(ctx context.Context, snap *Snapshot, bp *BOMPlan) error {
+	var (
+		index  = make(map[string]bomProduct)
+		failed = make(map[string]bool) // product groups whose create failed
+		err    error
+	)
+
+	for _, v := range snap.Variants {
+		if v.DefaultCode != "" {
+			index[string(v.DefaultCode)] = bomProduct{variant: v.ID, template: v.Template.ID}
+		}
+	}
+	for _, m := range a.res.Map {
+		index[m.DefaultCode] = bomProduct{variant: m.TargetID, template: m.TargetTemplateID}
+	}
+	a.res.BOMsRan = true
+	a.res.BOMUnchanged = bp.Unchanged
+	for _, act := range bp.Actions {
+		if act.Kind != bomCreate {
+			continue
+		}
+		if err = ctx.Err(); err != nil {
+			return err
+		}
+		if err = a.createBOM(ctx, act, index); err != nil {
+			failed[act.Group] = true
+			a.bomFailure(act.File.SourceID, err)
+		}
+	}
+	for _, act := range bp.Actions {
+		if act.Kind != bomSetCode {
+			continue
+		}
+		if err = a.api.UpdateBOMCode(ctx, act.TargetID, act.New); err != nil {
+			a.bomFailure(act.File.SourceID, err)
+			continue
+		}
+		a.res.BOMUpdated++
+	}
+	for _, act := range bp.Actions {
+		if act.Kind != bomArchive {
+			continue
+		}
+		if failed[act.Group] {
+			a.res.Warnings = append(a.res.Warnings, fmt.Sprintf("bom %d of %s not archived: creating its replacement failed", act.TargetID, act.Product))
+			continue
+		}
+		if err = a.api.SetBOMActive(ctx, act.TargetID, false); err != nil {
+			a.res.BOMFailed++
+			a.res.Failures = append(a.res.Failures, fmt.Sprintf("archive bom %d: %v", act.TargetID, err))
+			continue
+		}
+		a.res.BOMArchived++
+	}
+	return nil
+}
+
+func (a *applier) bomFailure(sourceID int, err error) {
+	a.res.BOMFailed++
+	a.res.Failures = append(a.res.Failures, fmt.Sprintf("bom %d: %v", sourceID, err))
+}
+
+// createBOM resolves the product, components and units of a planned BOM to target ids and creates it.
+func (a *applier) createBOM(ctx context.Context, act BOMAction, index map[string]bomProduct) error {
+	var (
+		b   = act.File
+		in  odoo.CreateBOMRequest
+		ok  bool
+		err error
+	)
+
+	in = odoo.CreateBOMRequest{Code: b.Code, Type: b.Type, Quantity: b.ProductQty}
+	if in.UoMID, ok = a.uomIDs[b.UoM]; !ok {
+		return fmt.Errorf("unit of measure %q is not in the target", b.UoM)
+	}
+	if b.Product != nil {
+		p, found := index[b.Product.DefaultCode]
+		if !found {
+			return fmt.Errorf("product %q is not in the target", b.Product.DefaultCode)
+		}
+		in.TemplateID, in.VariantID = p.template, p.variant
+	} else {
+		for _, c := range b.Template.DefaultCodes {
+			if p, found := index[c]; found {
+				in.TemplateID = p.template
+				break
+			}
+		}
+		if in.TemplateID == 0 {
+			return fmt.Errorf("no product of template codes %v is in the target", b.Template.DefaultCodes)
+		}
+	}
+	for _, l := range b.Lines {
+		p, found := index[l.Component]
+		if !found {
+			return fmt.Errorf("component %q is not in the target", l.Component)
+		}
+		unit, found := a.uomIDs[l.UoM]
+		if !found {
+			return fmt.Errorf("unit of measure %q is not in the target", l.UoM)
+		}
+		in.Lines = append(in.Lines, odoo.CreateBOMLine{ProductID: p.variant, Quantity: l.Qty, UoMID: unit})
+	}
+	if _, err = a.api.CreateBOM(ctx, in); err != nil {
+		return err
+	}
+	a.res.BOMCreated++
+	return nil
 }
 
 func (a *applier) createCategories(ctx context.Context, paths []string) error {

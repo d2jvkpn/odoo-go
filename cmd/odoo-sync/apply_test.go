@@ -23,6 +23,8 @@ type fakeTarget struct {
 	failTemplate string // name of a template whose creation fails
 	failCategory bool
 	failVariant  int // ID of a variant whose write fails
+	boms         []odoo.CreateBOMRequest
+	failBOMCode  string // Code of a BOM whose creation fails
 }
 
 func (f *fakeTarget) record(format string, args ...any) {
@@ -305,4 +307,136 @@ func TestApplyRestoresATemplateThenArchivesTheVariantsThatStayArchived(t *testin
 	_, err := applyPlan(context.Background(), fake, snap, plan)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"template-active:5001:true", "variant-active:2:false"}, fake.calls)
+}
+
+func (f *fakeTarget) CreateBOM(_ context.Context, in odoo.CreateBOMRequest) (int, error) {
+	if f.failBOMCode != "" && in.Code == f.failBOMCode {
+		return 0, fmt.Errorf("boom")
+	}
+	f.boms = append(f.boms, in)
+	f.record("create-bom:%d:%d", in.TemplateID, in.VariantID)
+	return 700 + len(f.boms), nil
+}
+
+func (f *fakeTarget) SetBOMActive(_ context.Context, id int, active bool) error {
+	f.record("bom-active:%d:%t", id, active)
+	return nil
+}
+
+func (f *fakeTarget) UpdateBOMCode(_ context.Context, id int, code string) error {
+	f.record("bom-code:%d:%s", id, code)
+	return nil
+}
+
+func TestApplyCreatesVariantAndTemplateBOMsWithTargetIDs(t *testing.T) {
+	snap := bomSnapshot()
+	tmpl := fBOM(2, "", "T", fLine("C-1", 1))
+	tmpl.Product, tmpl.Type = nil, "phantom"
+	tmpl.Template = FileBOMTemplate{SourceID: 9, DefaultCodes: []string{"P-2"}}
+	plan, problems := buildPlan(bomFile(fBOM(1, "P-1", "X", fLine("C-1", 2)), tmpl), snap, bomOpt)
+	require.Empty(t, problems)
+	fake := &fakeTarget{}
+
+	res, err := applyPlan(context.Background(), fake, snap, plan)
+	require.NoError(t, err)
+	assert.Equal(t, []odoo.CreateBOMRequest{
+		{TemplateID: 5001, VariantID: 1, Code: "X", Type: "normal", Quantity: 1, UoMID: 1,
+			Lines: []odoo.CreateBOMLine{{ProductID: 10, Quantity: 2, UoMID: 1}}},
+		{TemplateID: 5002, Code: "T", Type: "phantom", Quantity: 1, UoMID: 1,
+			Lines: []odoo.CreateBOMLine{{ProductID: 10, Quantity: 1, UoMID: 1}}},
+	}, fake.boms)
+	assert.Equal(t, 2, res.BOMCreated)
+}
+
+func TestApplyCreatesBOMsOfProductsCreatedInTheSameRunAfterTheTemplates(t *testing.T) {
+	snap := emptySnapshot()
+	f := sampleFile()
+	f.Include = []string{"products", "boms"}
+	f.BOMs = []FileBOM{fBOM(1, "A-1", "", fLine("273001101", 1))}
+	plan, problems := buildPlan(f, snap, importOptions{EmptyCode: emptyCodeReject, SaleOK: saleOKAll, BOMs: true})
+	require.Empty(t, problems)
+	fake := &fakeTarget{
+		generated: map[int][]odoo.Product{
+			900: {{ID: 101, ValueIDs: []int{30}}, {ID: 102, ValueIDs: []int{31}}},
+			901: {{ID: 301, ValueIDs: []int{}}},
+		},
+		values: map[int]odoo.ProductAttributeValue{30: ptav(30, "1kg"), 31: ptav(31, "1.5kg")},
+	}
+
+	res, err := applyPlan(context.Background(), fake, snap, plan)
+	require.NoError(t, err)
+	require.Len(t, fake.boms, 1)
+	assert.Equal(t, 900, fake.boms[0].TemplateID)
+	assert.Equal(t, 101, fake.boms[0].VariantID)
+	assert.Equal(t, 301, fake.boms[0].Lines[0].ProductID)
+	assert.Equal(t, "create-bom:900:101", fake.calls[len(fake.calls)-1], "BOMs are written after every template")
+	assert.Equal(t, 1, res.BOMCreated)
+}
+
+func TestApplyBOMsCreateFirstThenCodeThenArchive(t *testing.T) {
+	snap := bomSnapshot()
+	snap.BOMs = []odoo.BOM{tBOM(70, 5001, 1, "old", tLine(10, 2)), tBOM(71, 5002, 2, "", tLine(10, 1)), tBOM(72, 5002, 2, "", tLine(10, 3))}
+	plan, problems := buildPlan(bomFile(
+		fBOM(1, "P-1", "new", fLine("C-1", 2)),
+		fBOM(2, "P-2", "", fLine("C-2", 1)),
+	), snap, bomOpt)
+	require.Empty(t, problems)
+	fake := &fakeTarget{}
+
+	res, err := applyPlan(context.Background(), fake, snap, plan)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"create-bom:5002:2", "bom-code:70:new", "bom-active:71:false", "bom-active:72:false"}, fake.calls)
+	assert.Equal(t, 1, res.BOMCreated)
+	assert.Equal(t, 1, res.BOMUpdated)
+	assert.Equal(t, 2, res.BOMArchived)
+}
+
+func TestApplyBOMFailureIsRecordedKeepsTheOldBOMAndContinues(t *testing.T) {
+	snap := bomSnapshot()
+	snap.BOMs = []odoo.BOM{tBOM(70, 5001, 1, "", tLine(10, 2))}
+	plan, problems := buildPlan(bomFile(
+		fBOM(1, "P-1", "BAD", fLine("C-2", 2)), // replaces BOM 70; the create fails
+		fBOM(2, "P-2", "", fLine("C-1", 1)),
+	), snap, bomOpt)
+	require.Empty(t, problems)
+	fake := &fakeTarget{failBOMCode: "BAD"}
+
+	res, err := applyPlan(context.Background(), fake, snap, plan)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"create-bom:5002:2"}, fake.calls, "the old BOM of the failed product stays active")
+	assert.Equal(t, 1, res.BOMFailed)
+	require.Len(t, res.Failures, 1)
+	assert.Contains(t, res.Failures[0], "bom 1")
+	assert.Equal(t, 1, res.BOMCreated)
+	assert.Zero(t, res.BOMArchived)
+}
+
+func TestApplyCountsUnchangedBOMs(t *testing.T) {
+	snap := bomSnapshot()
+	snap.BOMs = []odoo.BOM{tBOM(70, 5001, 1, "", tLine(10, 2))}
+	plan, problems := buildPlan(bomFile(fBOM(1, "P-1", "", fLine("C-1", 2))), snap, bomOpt)
+	require.Empty(t, problems)
+	fake := &fakeTarget{}
+
+	res, err := applyPlan(context.Background(), fake, snap, plan)
+	require.NoError(t, err)
+	assert.Empty(t, fake.calls)
+	assert.Equal(t, 1, res.BOMUnchanged)
+}
+
+func TestApplyFailedCreateOnlyWithholdsArchivesOfItsOwnGroup(t *testing.T) {
+	snap := bomSnapshot()
+	snap.BOMs = []odoo.BOM{tBOM(70, 5001, 1, "", tLine(10, 2)), tBOM(71, 5001, 0, "", tLine(10, 2))}
+	tmpl := fBOM(2, "", "OK", fLine("C-2", 2)) // template-level BOM of the same template, label "P-1" too
+	tmpl.Product = nil
+	tmpl.Template = FileBOMTemplate{SourceID: 9, DefaultCodes: []string{"P-1"}}
+	plan, problems := buildPlan(bomFile(fBOM(1, "P-1", "BAD", fLine("C-2", 2)), tmpl), snap, bomOpt)
+	require.Empty(t, problems)
+	fake := &fakeTarget{failBOMCode: "BAD"}
+
+	res, err := applyPlan(context.Background(), fake, snap, plan)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"create-bom:5001:0", "bom-active:71:false"}, fake.calls, "BOM 70 stays; BOM 71 of the other group goes")
+	require.Len(t, res.Warnings, 1)
+	assert.Contains(t, res.Warnings[0], "bom 70")
 }

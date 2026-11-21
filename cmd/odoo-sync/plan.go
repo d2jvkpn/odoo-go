@@ -38,6 +38,8 @@ type importOptions struct {
 	EmptyCode    string // emptyCodeReject or emptyCodeSkip
 	SaleOK       string // saleOKAll or saleOKOnly
 	NoCreateDeps bool   // a missing category, attribute or value is an error
+	NoProducts   bool   // plan no templates (a BOM-only import)
+	BOMs         bool   // plan the file's BOMs
 }
 
 // Diff is one field that differs between the file and the target.
@@ -91,6 +93,8 @@ type Plan struct {
 	NewValues     map[string][]string // attribute name -> value names to create
 	Templates     []TemplatePlan
 	Skipped       []string
+	BOMs          *BOMPlan          // nil unless BOMs are imported
+	SkippedCodes  map[string]string // default_code -> why its template was skipped, for BOMs that name it
 }
 
 func sameNumber(a, b float64) bool { return math.Abs(a-b) < 0.005 }
@@ -109,11 +113,21 @@ func uncodedVariants(t FileTemplate) []int {
 	return ids
 }
 
+// skipCodes remembers the codes of a skipped template, so a BOM that names one is skipped with the
+// reason instead of being reported as a missing product.
+func skipCodes(plan *Plan, t FileTemplate, reason string) {
+	for _, v := range t.Variants {
+		if v.DefaultCode != "" {
+			plan.SkippedCodes[v.DefaultCode] = reason
+		}
+	}
+}
+
 // buildPlan compares the file with the target snapshot. It returns the plan and every problem that
 // stops the import; with problems the plan must not be applied.
 func buildPlan(f *CatalogFile, snap *Snapshot, opt importOptions) (*Plan, []string) {
 	var (
-		plan     = &Plan{NewValues: make(map[string][]string)}
+		plan     = &Plan{NewValues: make(map[string][]string), SkippedCodes: make(map[string]string)}
 		problems []string
 		byCode   = make(map[string][]odoo.CatalogVariant)
 		wantCats = make(map[string]bool)
@@ -126,15 +140,21 @@ func buildPlan(f *CatalogFile, snap *Snapshot, opt importOptions) (*Plan, []stri
 			byCode[string(v.DefaultCode)] = append(byCode[string(v.DefaultCode)], v)
 		}
 	}
-	for _, t := range f.Templates {
+	templates := f.Templates
+	if opt.NoProducts {
+		templates = nil
+	}
+	for _, t := range templates {
 		label := fmt.Sprintf("template %d %q", t.SourceID, t.Name)
 		if opt.SaleOK == saleOKOnly && !t.SaleOK {
 			plan.Skipped = append(plan.Skipped, label+": sale_ok is false")
+			skipCodes(plan, t, label+" is skipped (sale_ok is false)")
 			continue
 		}
 		if missing := uncodedVariants(t); len(missing) > 0 {
 			if opt.EmptyCode == emptyCodeSkip {
 				plan.Skipped = append(plan.Skipped, fmt.Sprintf("%s: %d variant(s) without default_code", label, len(missing)))
+				skipCodes(plan, t, label+" is skipped (variants without default_code)")
 				continue
 			}
 			for _, id := range missing {
@@ -193,6 +213,12 @@ func buildPlan(f *CatalogFile, snap *Snapshot, opt importOptions) (*Plan, []stri
 				problems = append(problems, fmt.Sprintf("value %q of attribute %q does not exist in the target", v, a))
 			}
 		}
+	}
+	if opt.BOMs {
+		var bproblems []string
+
+		plan.BOMs, bproblems = buildBOMPlan(f, snap, plan, opt)
+		problems = append(problems, bproblems...)
 	}
 	return plan, problems
 }
@@ -443,4 +469,33 @@ func printPlan(w io.Writer, p *Plan) {
 		fmt.Fprintf(w, "skip %s\n", s)
 	}
 	fmt.Fprintf(w, "summary: %d to create, %d to update, %d unchanged, %d skipped\n", creates, updates, same, len(p.Skipped))
+	if p.BOMs != nil {
+		printBOMPlan(w, p.BOMs)
+	}
+}
+
+func printBOMPlan(w io.Writer, b *BOMPlan) {
+	var creates, archives, codes int
+
+	for _, a := range b.Actions {
+		switch a.Kind {
+		case bomCreate:
+			creates++
+			fmt.Fprintf(w, "create bom for %s (%s, %s %s, %d lines)\n", a.Product, a.File.Type, formatNumber(a.File.ProductQty), a.File.UoM, len(a.File.Lines))
+		case bomArchive:
+			archives++
+			fmt.Fprintf(w, "archive bom %d of %s\n", a.TargetID, a.Product)
+		case bomSetCode:
+			codes++
+			fmt.Fprintf(w, "bom %d of %s code: %q -> %q\n", a.TargetID, a.Product, a.Old, a.New)
+		}
+	}
+	for _, m := range b.Warnings {
+		fmt.Fprintln(w, "warning:", m)
+	}
+	for _, s := range b.Skipped {
+		fmt.Fprintf(w, "skip %s\n", s)
+	}
+	fmt.Fprintf(w, "bom summary: %d to create, %d to archive, %d code updates, %d unchanged, %d skipped\n",
+		creates, archives, codes, b.Unchanged, len(b.Skipped))
 }

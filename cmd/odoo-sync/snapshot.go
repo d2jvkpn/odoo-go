@@ -33,10 +33,12 @@ type Snapshot struct {
 	UoMs       map[string]int                     // unit name -> uom.uom ID
 	Variants   []odoo.CatalogVariant              // active and archived
 	Values     map[int]odoo.ProductAttributeValue // template attribute value ID -> value, for Variants
+	BOMs       []odoo.BOM                         // active and archived, with lines; nil unless requested
 }
 
-// loadSnapshot reads the target. It only reads.
-func loadSnapshot(ctx context.Context, api snapshotAPI) (*Snapshot, error) {
+// loadSnapshot reads the target. It only reads. BOMs are read only when withBOMs is set, so a
+// products-only import works on a database without the mrp module.
+func loadSnapshot(ctx context.Context, api snapshotAPI, withBOMs bool) (*Snapshot, error) {
 	var (
 		snap = &Snapshot{
 			Categories: make(map[string]int),
@@ -87,6 +89,11 @@ func loadSnapshot(ctx context.Context, api snapshotAPI) (*Snapshot, error) {
 	}
 	if snap.Values, err = api.ProductAttributeValues(ctx, ids); err != nil {
 		return nil, fmt.Errorf("read target attribute values: %w", err)
+	}
+	if withBOMs {
+		if snap.BOMs, err = api.ListBOMs(ctx, true); err != nil {
+			return nil, fmt.Errorf("read target BOMs: %w", err)
+		}
 	}
 	return snap, nil
 }

@@ -18,7 +18,7 @@ Odoo version or customized database can differ.
 | `product` | Products | Products, internal categories, attributes and variants |
 | `sale` | Sales | Sale orders and lines, `pricelist_id`, order confirm and cancel |
 | `sale_stock` | Sales and Warehouse Management | `delivery_status`, requested by every order read |
-| `mrp` | Manufacturing | Bills of materials (`mrp.bom`, `mrp.bom.line`), `boms` commands and BOM calls only |
+| `mrp` | Manufacturing | Bills of materials (`mrp.bom`, `mrp.bom.line`), `boms` commands, BOM calls and `odoo-sync` BOM sections only |
 | `stock` | Inventory | `is_storable`, stock quantities and locations, `SetProductStock` |
 | `account` | Invoicing | `taxes_id`, only with `products list -details` |
 | `mail` | Discuss | Helpdesk messages, followers and activities |

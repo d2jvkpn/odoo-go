@@ -1,9 +1,9 @@
-# Syncing products between Odoo databases
+# Syncing products and BOMs between Odoo databases
 
-`odoo-sync` copies categories, attributes, product templates and variants from a source Odoo to a
-target Odoo through a JSON file. The source is the master; the target is a replica. It reads the
-source and writes the target only, and never deletes: records missing from the file are not removed,
-and products archived in the source are archived in the target.
+`odoo-sync` copies categories, attributes, product templates, variants and bills of materials from a
+source Odoo to a target Odoo through a JSON file. The source is the master; the target is a replica.
+It reads the source and writes the target only, and never deletes: records missing from the file are
+not removed, and products archived in the source are archived in the target.
 
 ```sh
 go build -o target/odoo-sync ./cmd/odoo-sync
@@ -15,7 +15,8 @@ target/odoo-sync import -target configs/target.yaml -in data/catalog.json -map-o
 
 Connection files are read by `odoo.LoadClient` (`odoo.base_url`, `odoo.api_key`, optional
 `odoo.db`). Both databases need the sales and inventory modules, because product reads request
-`is_storable`.
+`is_storable`. BOMs also need the Manufacturing module (`mrp`); on a database without it, export and
+import with `-include products`.
 
 ## Matching
 
@@ -31,13 +32,17 @@ be matched, and they usually repeat the value combination of the variant that re
 
 - `-dry-run` prints what would be created, updated or archived and writes nothing.
 - `-empty-code reject` (default) refuses the whole import when a variant has no `default_code` and
-  lists them; `skip` skips the whole template that holds such a variant and reports it.
+  lists them; `skip` skips the whole template that holds such a variant and reports it. For BOMs it
+  covers a product or a component without a code: `skip` skips that BOM and archives no BOM of its
+  product, since the target copy of a skipped BOM cannot be judged.
 - `-sale-ok all` (default) imports every template; `only` imports templates with `sale_ok` set.
 - `-no-create-deps` fails instead of creating missing categories, attributes and values.
 - `-map-out file.csv` writes a CSV with the columns default_code, source_variant_id,
   target_variant_id and target_template_id. Use it to translate ids that another system
   stored from the source.
-- `-include products|all` selects sections; `boms` is not implemented yet.
+- `-include products|boms|all` selects sections. On export, `all` (default) writes both. On import,
+  `all` takes every section the file has; naming a section the file lacks is an error. A
+  products-only import never reads the target's BOMs.
 
 ## What is checked before anything is written
 
@@ -75,7 +80,47 @@ archived attribute or attribute value in the target also stops the import: resto
 When Odoo generates a combination that the file does not list (for example one excluded or archived
 in the source), the variant is archived and reported as a warning.
 
+## Bills of materials
+
+A BOM names its product by `default_code`: a BOM for one variant carries `product.default_code`, a
+BOM for a whole template carries `template.default_codes`, the sorted codes of the template's
+active, coded variants. Components are referenced by `default_code` too. The BOM `code` is not a key
+(it is neither unique nor always set); it is copied as an ordinary field.
+
+A BOM's identity is its content fingerprint: type, produced quantity, unit and the sorted
+(component, quantity, unit) lines. The reference, line order, source id and active state are not
+part of it. For each product that the file has a BOM for, the importer compares the active BOMs in
+the file with the active BOMs in the target:
+
+- same fingerprint: kept, and only its reference is synced;
+- in the file but not in the target: created;
+- in the target but not in the file: **archived**, never deleted, because manufacturing orders may
+  still point at it;
+- archived in the file: never created. A product whose file BOMs are all archived loses every
+  active BOM in the target; an archived BOM only needs its product to exist.
+
+So when the source edits the components of a BOM, the target ends with the old BOM archived and a
+new one created, not an edited one. Two active BOMs with the same content for one product count as
+one: the importer warns and keeps one, which also archives a duplicate that the target holds.
+Products the file has no BOM for are not touched.
+
+BOMs can be exported and imported apart from products with `-include boms`. Every product and
+component must then already exist in the target; a missing one stops the import and is listed, and
+nothing is created for it. A BOM whose product is created by the same import resolves against it,
+because BOMs are written last. Creates run first, then reference updates, then archives, so a
+product never loses its old BOM before the new one exists; if a create fails, that product keeps its
+old BOM and the failure is reported.
+
+With `-include all`, a BOM that names a product or component whose template the products side
+skipped (`-sale-ok only`, `-empty-code skip`) is skipped too and reported, not treated as missing.
+`-map-out` is refused for a BOM-only import. A `default_code` that matches several variants in the
+target stops the import.
+
+The import also stops on a missing unit of measure (BOM or line) and, unless `-empty-code skip`, on
+a product or component without a `default_code`. The export refuses a source BOM that has
+operations, byproducts or lines restricted by attribute value, because the file cannot carry them.
+
 ## Not covered
 
-BOMs (planned), stock quantities, price lists, taxes, images, vendor prices, and rewriting ids that
-other systems stored from the source.
+Operations (work centers), byproducts, attribute-restricted BOM lines, stock quantities, price
+lists, taxes, images, vendor prices, and rewriting ids that other systems stored from the source.

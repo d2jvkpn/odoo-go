@@ -47,7 +47,7 @@ func TestLoadSnapshotIndexesTheTarget(t *testing.T) {
 		uoms: []odoo.UoM{{ID: 1, Name: "kg"}},
 		cats: []odoo.ProductCategory{{ID: 7, Name: "番茄类", CompleteName: "蔬菜 / 番茄类"}},
 	}
-	snap, err := loadSnapshot(context.Background(), api)
+	snap, err := loadSnapshot(context.Background(), api, false)
 	require.NoError(t, err)
 	assert.Equal(t, map[string]int{"蔬菜 / 番茄类": 7}, snap.Categories)
 	assert.Equal(t, map[string]SnapAttribute{"规格": {
@@ -56,4 +56,18 @@ func TestLoadSnapshotIndexesTheTarget(t *testing.T) {
 	assert.Equal(t, map[string]int{"kg": 1}, snap.UoMs)
 	assert.Len(t, snap.Variants, 1)
 	assert.Equal(t, "1kg", snap.Values[30].Value)
+}
+
+func TestLoadSnapshotReadsBOMsOnlyWhenAsked(t *testing.T) {
+	boms := []odoo.BOM{{ID: 12, Type: "normal", Active: true}, {ID: 13, Active: false}}
+	api := fakeSnapshotAPI{fakeSource: fakeSource{boms: boms, values: map[int]odoo.ProductAttributeValue{}}}
+
+	snap, err := loadSnapshot(context.Background(), api, true)
+	require.NoError(t, err)
+	assert.Equal(t, boms, snap.BOMs)
+
+	api.noBOMs = true
+	snap, err = loadSnapshot(context.Background(), api, false)
+	require.NoError(t, err)
+	assert.Nil(t, snap.BOMs)
 }

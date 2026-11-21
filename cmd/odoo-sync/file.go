@@ -4,7 +4,9 @@ import (
 	"encoding/json/jsontext"
 	jsonv2 "encoding/json/v2"
 	"fmt"
+	"math"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -21,6 +23,7 @@ type CatalogFile struct {
 	Categories []FileCategory  `json:"categories,omitempty"`
 	Attributes []FileAttribute `json:"attributes,omitempty"`
 	Templates  []FileTemplate  `json:"templates,omitempty"`
+	BOMs       []FileBOM       `json:"boms,omitempty"`
 }
 
 // FileSource says where the file came from; it is informational.
@@ -78,6 +81,43 @@ type FileVariant struct {
 	Weight      float64           `json:"weight,omitzero"`
 	Volume      float64           `json:"volume,omitzero"`
 	Active      bool              `json:"active"`
+}
+
+// FileBOMProduct names the variant a BOM is for, by default_code.
+type FileBOMProduct struct {
+	DefaultCode string `json:"default_code,omitempty"`
+}
+
+// FileBOMTemplate records the template of a BOM. For a template-level BOM, DefaultCodes holds the
+// sorted codes of the template's active, coded variants, which identify the product across databases.
+type FileBOMTemplate struct {
+	SourceID     int      `json:"source_id"`
+	DefaultCodes []string `json:"default_codes,omitempty"`
+}
+
+// FileBOMLine is one component, referenced by default_code ("" when the component has none).
+type FileBOMLine struct {
+	Component string  `json:"component"`
+	Qty       float64 `json:"qty"`
+	UoM       string  `json:"uom"`
+}
+
+// FileBOM is a bill of materials. Product is nil for a template-level BOM.
+type FileBOM struct {
+	SourceID   int             `json:"source_id"`
+	Product    *FileBOMProduct `json:"product,omitempty"`
+	Template   FileBOMTemplate `json:"template"`
+	Type       string          `json:"type"` // "normal" or "phantom"
+	ProductQty float64         `json:"product_qty"`
+	UoM        string          `json:"uom"`
+	Code       string          `json:"code,omitempty"`
+	Active     bool            `json:"active"`
+	Lines      []FileBOMLine   `json:"lines"`
+}
+
+// HasSection reports whether the file declares the section ("products" or "boms").
+func (f *CatalogFile) HasSection(name string) bool {
+	return slices.Contains(f.Include, name)
 }
 
 func readCatalogFile(path string) (*CatalogFile, error) {
@@ -194,6 +234,38 @@ func (f *CatalogFile) Validate() []string {
 				} else {
 					codes[v.DefaultCode] = t.SourceID
 				}
+			}
+		}
+	}
+	return append(problems, f.validateBOMs()...)
+}
+
+func (f *CatalogFile) validateBOMs() []string {
+	var problems []string
+
+	for _, b := range f.BOMs {
+		label := fmt.Sprintf("bom %d", b.SourceID)
+		if b.Type != "normal" && b.Type != "phantom" {
+			problems = append(problems, fmt.Sprintf("%s: type must be normal or phantom, got %q", label, b.Type))
+		}
+		if math.IsNaN(b.ProductQty) || b.ProductQty <= 0 {
+			problems = append(problems, label+": product_qty must be positive")
+		}
+		if b.UoM == "" {
+			problems = append(problems, label+": uom is empty")
+		}
+		if b.Product != nil && len(b.Template.DefaultCodes) > 0 {
+			problems = append(problems, label+": has both product and template default_codes")
+		}
+		if len(b.Lines) == 0 {
+			problems = append(problems, label+": has no lines")
+		}
+		for i, l := range b.Lines {
+			if math.IsNaN(l.Qty) || l.Qty <= 0 {
+				problems = append(problems, fmt.Sprintf("%s: line %d: qty must be positive", label, i+1))
+			}
+			if l.UoM == "" {
+				problems = append(problems, fmt.Sprintf("%s: line %d: uom is empty", label, i+1))
 			}
 		}
 	}
