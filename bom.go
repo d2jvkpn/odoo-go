@@ -188,3 +188,11 @@ func (c *Client) SetBOMActive(ctx context.Context, id int, active bool) error {
 		Active bool `json:"active"`
 	}{active}, ErrBOMNotFound)
 }
+
+// UpdateBOMCode sets the reference of a bill of materials; "" clears it. It returns ErrBOMNotFound
+// for an unknown ID and does not retry.
+func (c *Client) UpdateBOMCode(ctx context.Context, id int, code string) error {
+	return c.updateRecord(ctx, "mrp.bom", id, struct {
+		Code string `json:"code"`
+	}{code}, ErrBOMNotFound)
+}

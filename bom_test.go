@@ -229,3 +229,15 @@ func TestGetBOMReadsOnlyItsOwnLines(t *testing.T) {
 	require.NoError(t, err)
 	assertJSON(t, lineParams["domain"], `[["bom_id","=",7]]`)
 }
+
+func TestUpdateBOMCodeWritesCodeAndAllowsClearing(t *testing.T) {
+	var writes []map[string]any
+
+	client := orderTestClient(t, recordingHandler(t, "mrp.bom", &writes))
+	require.NoError(t, client.UpdateBOMCode(context.Background(), 21, "CAKE-2"))
+	require.NoError(t, client.UpdateBOMCode(context.Background(), 21, ""))
+	require.Len(t, writes, 2)
+	assertJSON(t, writes[0], `{"ids":[21],"vals":{"code":"CAKE-2"}}`)
+	assertJSON(t, writes[1], `{"ids":[21],"vals":{"code":""}}`)
+	assert.ErrorIs(t, client.UpdateBOMCode(context.Background(), 0, "x"), ErrInvalidArgument)
+}
