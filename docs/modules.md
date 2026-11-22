@@ -55,7 +55,8 @@ only lists, creates and updates them: it has no call that assigns a product to o
 ## Failure modes
 
 A missing module shows up as an Odoo HTTP 500 naming the missing field or model, for example
-`Invalid field 'is_storable' on 'product.product'` when `stock` is not installed, or an unknown model
-`mrp.bom` when `mrp` is not. The SDK does not
-probe for modules. Variant creation sets `create_variant=always` on new attributes; with `dynamic`
-Odoo creates variants only on first order, so none appear when the template line is added.
+`Invalid field 'is_storable' on 'product.product'` when `stock` is not installed, or an unknown
+model `mrp.bom` when `mrp` is not (the status for an unknown model is unverified and may be 404
+rather than 500). The SDK does not probe for modules. Variant creation sets `create_variant=always`
+on new attributes; with `dynamic` Odoo creates variants only on first order, so none appear when the
+template line is added.

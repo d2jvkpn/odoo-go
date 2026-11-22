@@ -120,6 +120,25 @@ The import also stops on a missing unit of measure (BOM or line) and, unless `-e
 a product or component without a `default_code`. The export refuses a source BOM that has
 operations, byproducts or lines restricted by attribute value, because the file cannot carry them.
 
+## Verification status
+
+Everything above is covered by unit tests against a fake Odoo server and by read-only runs
+(`export`, `check` and `import -dry-run`) against a real source. No import has been run against a
+real Odoo yet, so the write behavior below is **not verified**. Treat it as the intended design, and
+run the write steps in [manual-testing.md](manual-testing.md#odoo-sync-tests) on a disposable test
+database before relying on it. This section is to be updated, or removed, once they have been run.
+
+- How Odoo generates variants after attribute lines are added through JSON-2, and the write-back of
+  the extra price of an attribute value.
+- That `SetProductActive` archives a single variant, and that archiving every variant of a template
+  matches archiving the template.
+- The line commands that `CreateBOM` sends to create a BOM with its lines in one request.
+- `UpdateBOMCode`, the in-place update of a BOM reference.
+- Idempotence: a second import of the same file reporting no change, for products and for BOMs.
+- Whether Odoo rejects a BOM whose variant belongs to another template; the importer does not check.
+- The HTTP status Odoo returns for BOM calls without the `mrp` module ([modules.md](modules.md)
+  says 500; it may be 404).
+
 ## Not covered
 
 Operations (work centers), byproducts, attribute-restricted BOM lines, stock quantities, price
