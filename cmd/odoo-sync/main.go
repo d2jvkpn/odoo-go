@@ -1,4 +1,4 @@
-// Command odoo-sync exports products from one Odoo database and imports them into another.
+// Command odoo-sync copies products, bills of materials and partners from one Odoo database to another.
 package main
 
 import (
@@ -17,13 +17,20 @@ import (
 )
 
 const usage = `Usage:
-  odoo-sync check  -in catalog.json
-  odoo-sync export -source source.yaml -out catalog.json [-include products|boms|all]
-  odoo-sync import -target target.yaml -in catalog.json [-dry-run] [-empty-code reject|skip]
-                   [-sale-ok all|only] [-include products|boms|all] [-no-create-deps] [-map-out map.csv]
+  odoo-sync products export -source source.yaml -out products.json
+  odoo-sync products check  -in products.json
+  odoo-sync products import -target target.yaml -in products.json [-dry-run] [-empty-code reject|skip]
+                            [-sale-ok all|only] [-no-create-deps] [-map-out map.csv]
+  odoo-sync boms export|check|import   same flags as products, without -sale-ok and -map-out
+  odoo-sync partners export -source source.yaml -out partners.json
+  odoo-sync partners check  -in partners.json
+  odoo-sync partners import -target target.yaml -in partners.json [-dry-run]
+                            [-empty-key reject|skip] [-no-create-deps]
 
 Connection files are the YAML configuration read by odoo.LoadClient (odoo.base_url, odoo.api_key,
-optional odoo.db). Products are matched between databases by default_code only.
+optional odoo.db). Products are matched between databases by default_code only. Import products
+before boms: a BOM needs its products to exist in the target.
+Partners are matched by ref, then vat, then email; children by parent, type and name.
 `
 
 func main() {
@@ -47,18 +54,37 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 		return err
 	}
 	switch args[0] {
-	case "check":
-		return runCheck(args[1:], out)
-	case "export":
-		return runExport(ctx, args[1:], out)
-	case "import":
-		return runImport(ctx, args[1:], out)
+	case "products", "boms":
+		return runCatalog(ctx, args[0], args[1:], out)
+	case "partners":
+		return runPartners(ctx, args[1:], out)
 	default:
 		return fmt.Errorf("unknown command %q; use -h for help", args[0])
 	}
 }
 
-func runCheck(args []string, out io.Writer) error {
+// runCatalog runs one command of the products or boms group.
+func runCatalog(ctx context.Context, section string, args []string, out io.Writer) error {
+	if len(args) > 0 && (args[0] == "-h" || args[0] == "--help") {
+		_, err := io.WriteString(out, usage)
+		return err
+	}
+	if len(args) == 0 {
+		return fmt.Errorf("odoo-sync %s: missing command; use export, check or import", section)
+	}
+	switch args[0] {
+	case "check":
+		return runCheck(section, args[1:], out)
+	case "export":
+		return runExport(ctx, section, args[1:], out)
+	case "import":
+		return runImport(ctx, section, args[1:], out)
+	default:
+		return fmt.Errorf("unknown command %q for %s; use -h for help", args[0], section)
+	}
+}
+
+func runCheck(section string, args []string, out io.Writer) error {
 	var (
 		flags    *flag.FlagSet
 		in       *string
@@ -68,7 +94,7 @@ func runCheck(args []string, out io.Writer) error {
 		err      error
 	)
 
-	flags = flag.NewFlagSet("odoo-sync check", flag.ContinueOnError)
+	flags = flag.NewFlagSet("odoo-sync "+section+" check", flag.ContinueOnError)
 	flags.SetOutput(out)
 	in = flags.String("in", "", "catalog file")
 	if err = flags.Parse(args); err != nil {
@@ -83,6 +109,9 @@ func runCheck(args []string, out io.Writer) error {
 	if f, err = readCatalogFile(*in); err != nil {
 		return err
 	}
+	if !f.HasSection(section) {
+		return fmt.Errorf("the file has no %s section", section)
+	}
 	if problems = f.Validate(); len(problems) > 0 {
 		for _, p := range problems {
 			fmt.Fprintln(out, "-", p)
@@ -96,22 +125,11 @@ func runCheck(args []string, out io.Writer) error {
 	return nil
 }
 
-// checkInclude accepts the sections this version can handle.
-func checkInclude(v string) error {
-	switch v {
-	case "all", "products", "boms":
-		return nil
-	default:
-		return fmt.Errorf("-include must be products, boms or all, got %q", v)
-	}
-}
-
-func runExport(ctx context.Context, args []string, out io.Writer) error {
+func runExport(ctx context.Context, section string, args []string, out io.Writer) error {
 	var (
 		flags   *flag.FlagSet
 		source  *string
 		dest    *string
-		include *string
 		client  *odoo.Client
 		f       *CatalogFile
 		count   int
@@ -119,11 +137,10 @@ func runExport(ctx context.Context, args []string, out io.Writer) error {
 		err     error
 	)
 
-	flags = flag.NewFlagSet("odoo-sync export", flag.ContinueOnError)
+	flags = flag.NewFlagSet("odoo-sync "+section+" export", flag.ContinueOnError)
 	flags.SetOutput(out)
 	source = flags.String("source", "", "connection file of the source Odoo")
 	dest = flags.String("out", "", "catalog file to write")
-	include = flags.String("include", "all", "sections to export: products, boms or all")
 	if err = flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
@@ -133,14 +150,11 @@ func runExport(ctx context.Context, args []string, out io.Writer) error {
 	if *source == "" || *dest == "" {
 		return errors.New("-source and -out are required")
 	}
-	if err = checkInclude(*include); err != nil {
-		return err
-	}
 	if client, err = odoo.LoadClient(*source); err != nil {
 		return err
 	}
 	name := strings.TrimSuffix(filepath.Base(*source), filepath.Ext(*source))
-	if f, omitted, err = buildExport(ctx, client, name, client.BaseURL, time.Now(), *include); err != nil {
+	if f, omitted, err = buildExport(ctx, client, name, client.BaseURL, time.Now(), section); err != nil {
 		return err
 	}
 	if err = writeCatalogFile(*dest, f); err != nil {
@@ -156,7 +170,7 @@ func runExport(ctx context.Context, args []string, out io.Writer) error {
 	return nil
 }
 
-func runImport(ctx context.Context, args []string, out io.Writer) error {
+func runImport(ctx context.Context, section string, args []string, out io.Writer) error {
 	var (
 		flags        *flag.FlagSet
 		target       *string
@@ -164,7 +178,6 @@ func runImport(ctx context.Context, args []string, out io.Writer) error {
 		dryRun       *bool
 		emptyCode    *string
 		saleOK       *string
-		include      *string
 		noCreateDeps *bool
 		mapOut       *string
 		client       *odoo.Client
@@ -178,14 +191,13 @@ func runImport(ctx context.Context, args []string, out io.Writer) error {
 		err          error
 	)
 
-	flags = flag.NewFlagSet("odoo-sync import", flag.ContinueOnError)
+	flags = flag.NewFlagSet("odoo-sync "+section+" import", flag.ContinueOnError)
 	flags.SetOutput(out)
 	target = flags.String("target", "", "connection file of the target Odoo")
 	in = flags.String("in", "", "catalog file to import")
 	dryRun = flags.Bool("dry-run", false, "print the plan and write nothing")
 	emptyCode = flags.String("empty-code", emptyCodeReject, "variants without default_code: reject or skip")
 	saleOK = flags.String("sale-ok", saleOKAll, "which templates to import: all or only (sale_ok)")
-	include = flags.String("include", "all", "sections to import: products, boms or all (every section in the file)")
 	noCreateDeps = flags.Bool("no-create-deps", false, "fail instead of creating missing categories and attributes")
 	mapOut = flags.String("map-out", "", "write the source-to-target variant mapping to this CSV file")
 	if err = flags.Parse(args); err != nil {
@@ -197,9 +209,6 @@ func runImport(ctx context.Context, args []string, out io.Writer) error {
 	if *target == "" || *in == "" {
 		return errors.New("-target and -in are required")
 	}
-	if err = checkInclude(*include); err != nil {
-		return err
-	}
 	if *emptyCode != emptyCodeReject && *emptyCode != emptyCodeSkip {
 		return fmt.Errorf("-empty-code must be reject or skip, got %q", *emptyCode)
 	}
@@ -209,20 +218,17 @@ func runImport(ctx context.Context, args []string, out io.Writer) error {
 	if *dryRun && *mapOut != "" {
 		return errors.New("-map-out cannot be used with -dry-run: nothing is created, so there is no mapping")
 	}
-	if *include == "boms" && *mapOut != "" {
+	if section == "boms" && *mapOut != "" {
 		return errors.New("-map-out needs products in the import")
 	}
 	if f, err = readCatalogFile(*in); err != nil {
 		return err
 	}
-	if products, opt.BOMs, err = importSections(f, *include); err != nil {
+	if products, opt.BOMs, err = importSections(f, section); err != nil {
 		return err
 	}
 	opt.NoProducts = !products
 	opt.BOMs = opt.BOMs && len(f.BOMs) > 0 // nothing to reconcile, so the target's BOMs are not read
-	if opt.NoProducts && *mapOut != "" {
-		return errors.New("-map-out needs products in the import")
-	}
 	if problems = f.Validate(); len(problems) > 0 {
 		return reportProblems(out, problems)
 	}
@@ -262,18 +268,12 @@ func runImport(ctx context.Context, args []string, out io.Writer) error {
 	return nil
 }
 
-// importSections decides which sections of the file to import from -include: "all" takes every
-// section the file has, a named section must be in the file.
-func importSections(f *CatalogFile, include string) (products, boms bool, err error) {
-	switch include {
-	case "products", "boms":
-		if !f.HasSection(include) {
-			return false, false, fmt.Errorf("the file has no %s section; export it with -include %s or all", include, include)
-		}
-		return include == "products", include == "boms", nil
-	default:
-		return f.HasSection("products"), f.HasSection("boms"), nil
+// importSections says which section the command imports: the file must hold it.
+func importSections(f *CatalogFile, section string) (products, boms bool, err error) {
+	if !f.HasSection(section) {
+		return false, false, fmt.Errorf("the file has no %s section; export it with odoo-sync %s export", section, section)
 	}
+	return section == "products", section == "boms", nil
 }
 
 func reportProblems(out io.Writer, problems []string) error {

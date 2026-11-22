@@ -618,7 +618,17 @@ go test -race -cover ./...
 go test . -run Example -v
 ```
 
-## Syncing products and BOMs between databases
+## Syncing products, BOMs and partners between databases
 
-`cmd/odoo-sync` exports categories, attributes, templates, variants and bills of materials from one
-Odoo and imports them into another, matching by `default_code`. See [docs/catalog-sync.md](docs/catalog-sync.md).
+`cmd/odoo-sync` exports categories, attributes, templates, variants, bills of materials and partners
+from one Odoo and imports them into another through the `products`, `boms` and `partners` command
+groups. Products and BOMs match by `default_code`, partners by `ref`, `vat` and `email`:
+
+```sh
+target/odoo-sync products export -source configs/source.yaml -out data/products.json
+target/odoo-sync products import -target configs/target.yaml -in data/products.json -dry-run
+target/odoo-sync partners export -source configs/source.yaml -out data/partners.json
+target/odoo-sync partners import -target configs/target.yaml -in data/partners.json -dry-run
+```
+
+See [docs/catalog-sync.md](docs/catalog-sync.md).

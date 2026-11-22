@@ -6,7 +6,7 @@ This Go 1.27 module, `github.com/d2jvkpn/odoo-go`, is a Go SDK for the Odoo JSON
 a typed client for products and variants, product categories, sales orders and their fulfillment,
 partners, countries, stock and bills of materials, plus helpdesk tickets through the OCA addon. It
 ships two command line tools: `odoo-cli` for querying and writing records, and `odoo-sync` for
-copying products and BOMs between databases.
+copying products, BOMs and partners between databases.
 
 ## Project Layout
 
@@ -18,7 +18,7 @@ copying products and BOMs between databases.
 ├── *.go                  — package `odoo`: client, config and every API call; tests beside them as `*_test.go`
 ├── cmd/                  — `main` entry points; arguments and output only, reusable behavior in package `odoo`
 │   ├── odoo-cli/         — queries and writes: products, boms, orders, partners, stock, helpdesk
-│   └── odoo-sync/        — exports and imports products and BOMs between Odoo databases
+│   └── odoo-sync/        — exports and imports products, BOMs and partners between Odoo databases
 ├── oca/                  — packages for OCA addons
 │   └── helpdesk/         — helpdesk tickets, messages, attachments, followers and activities
 ├── docs/                 — project documentation

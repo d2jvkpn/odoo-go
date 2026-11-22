@@ -1,12 +1,12 @@
 # Manual Testing
 
 Manual checks against a live Odoo server, for behavior the `httptest` fixtures cannot prove. Run
-every command from the repository root. All commands are read-only except those under
-[Order write tests](#order-write-tests), [Helpdesk tests](#helpdesk-tests) and the write steps of
-[odoo-sync tests](#odoo-sync-tests); never run any write command (`create`, `update`, `upsert`,
-`archive`, `stock set -yes`, `orders confirm|cancel -yes`, `odoo-sync import` without `-dry-run`,
-and every `helpdesk` action except the reads listed there) against a database that holds real data,
-because they write records and are never retried automatically.
+every command from the repository root. All commands are read-only except those under [Order write
+tests](#order-write-tests), [Helpdesk tests](#helpdesk-tests) and the write steps of [odoo-sync
+tests](#odoo-sync-tests); never run any write command (`create`, `update`, `upsert`, `archive`,
+`stock set -yes`, `orders confirm|cancel -yes`, `odoo-sync * import` without `-dry-run`, and every
+`helpdesk` action except the reads listed there) against a database that holds real data, because
+they write records and are never retried automatically.
 
 ## Prerequisites
 
@@ -108,23 +108,29 @@ go run ./cmd/odoo-cli orders list -domain '[["origin","=","odoo-go-test"]]' -ord
 
 Needs two connection files (`odoo.base_url`, `odoo.api_key`, optional `odoo.db`): a source with real
 products and a **test** target, empty or disposable. Both need the sales and inventory modules, and
-BOMs need `mrp`. Keep files under `data/tests/sync/`. The unit tests use fakes, so only these steps
-show how a real Odoo behaves.
+BOMs need `mrp`; partners need only `base`. Keep files under `data/tests/sync/`. The unit tests use
+fakes, so only these steps show how a real Odoo behaves.
 
 Read-only steps (safe on any database as the source; `import -dry-run` writes nothing):
 
 ```sh
 go build -o target/odoo-sync ./cmd/odoo-sync
-target/odoo-sync export -source configs/source.yaml -out data/tests/sync/catalog.json
-target/odoo-sync check  -in data/tests/sync/catalog.json
-target/odoo-sync import -target configs/target.yaml -in data/tests/sync/catalog.json -dry-run
+target/odoo-sync products export -source configs/source.yaml -out data/tests/sync/products.json
+target/odoo-sync products check  -in data/tests/sync/products.json
+target/odoo-sync products import -target configs/target.yaml -in data/tests/sync/products.json -dry-run
+target/odoo-sync boms export -source configs/source.yaml -out data/tests/sync/boms.json
+target/odoo-sync boms check  -in data/tests/sync/boms.json
+target/odoo-sync boms import -target configs/target.yaml -in data/tests/sync/boms.json -dry-run
+target/odoo-sync partners export -source configs/source.yaml -out data/tests/sync/partners.json
+target/odoo-sync partners check  -in data/tests/sync/partners.json
+target/odoo-sync partners import -target configs/target.yaml -in data/tests/sync/partners.json -dry-run
 ```
 
-Expected: `check` prints `ok:` with the template, variant and BOM counts; exporting twice gives the
-same file apart from `exported_at`; a dry run against the source itself proposes no product
-changes. A source BOM with operations, byproducts or attribute-restricted lines makes the export
-fail, naming the BOM. Without `mrp` the export fails; use `-include products` and note the HTTP
-status Odoo returns (404 or 500), which [modules.md](modules.md) states as 500 and is unverified.
+Expected: `check` prints `ok:` with the counts; exporting twice gives the same file apart from
+`exported_at`; a dry run against the source itself proposes no product changes. A source BOM with
+operations, byproducts or attribute-restricted lines makes the export fail, naming the BOM. Without
+`mrp` the `boms` export fails; skip it and note the HTTP status Odoo returns (404 or 500), which
+[modules.md](modules.md) states as 500 and is unverified.
 
 Strict mode stops on products or components without a `default_code`; confirm that the dry run
 lists them all and that `-empty-code skip` skips them and says so.
@@ -132,19 +138,36 @@ lists them all and that `-empty-code skip` skips them and says so.
 Write steps, **test target only** (confirm the target before each run; the first import creates
 records that the SDK cannot delete, so clean up in the Odoo UI):
 
-1. `import ... -include products -map-out data/tests/sync/map.csv`. Check in Odoo: every template
-   has all the variants the file lists, each `default_code` is set, archived variants are archived,
-   and extra prices match the source. This is the only proof of how Odoo generates variants after
-   attribute lines are added through JSON-2, and that `SetProductActive` archives a variant.
+1. `products import ... -map-out data/tests/sync/map.csv`. Check in Odoo: every template has all the
+   variants the file lists, each `default_code` is set, archived variants are archived, and extra
+   prices match the source. This is the only proof of how Odoo generates variants after attribute
+   lines are added through JSON-2, and that `SetProductActive` archives a variant.
 2. Run the same import again. Expected: no creates, updates or archives.
-3. `import ... -include boms`. Check in Odoo: each BOM has the right product (variant or template),
+3. `boms import ...`. Check in Odoo: each BOM has the right product (variant or template),
    components, quantities and units. This proves the `CreateBOM` line commands.
 4. Run it again; expected `0 to create, 0 to archive, 0 code updates` and all BOMs unchanged.
 5. In the source, change a component quantity and a BOM `code`, export again and import. Expected:
    the changed BOM is created and the old one archived (never edited), and a code-only change
    updates the reference in place (`UpdateBOMCode`).
-6. Try an import of `-include boms` into a target that lacks a product or component: it must list
-   every missing code and write nothing.
+6. Try a `boms import` into a target that lacks a product or component: it must list every missing
+   code and write nothing.
+
+Partner steps, **test target only**; `partners check` and `import -dry-run` are read-only:
+
+7. `partners export`, `partners check`, then `partners import -dry-run` into the test target. The
+   `check` output lists duplicate keys in the file, if any; read the `summary:` line.
+8. The real `partners import`. Check in Odoo: each partner has its `ref`, `vat`, address, country,
+   state and tags, children sit under the right parent with the right `type`, and archived partners
+   are archived.
+9. Run the same import again. Expected `created 0, updated 0` and every partner unchanged; record
+   the actual result, since this is the only proof of idempotence against a real Odoo.
+10. Archive round trip, only with a **disposable source** (for example a second test database; this
+    step writes to the source, so never do it on a real source): archive a partner and a company
+    with children in the source, export and import (the target archives them, and Odoo archives the
+    company's children with it), then restore them in the source and import again (the target
+    restores them, and the children that the file marks active).
+11. On a database that has keyless partners (no `ref`, `vat` or `email`), the default import must
+    stop and list them, and `-empty-key skip` must skip them and their children and say so.
 
 Note any Odoo behavior that differs from [catalog-sync.md](catalog-sync.md) and fix the document.
 

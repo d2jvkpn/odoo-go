@@ -74,15 +74,15 @@ func TestExportThenDryRunImportCreatesNothing(t *testing.T) {
 
 	catalog := filepath.Join(t.TempDir(), "catalog.json")
 	var out bytes.Buffer
-	require.NoError(t, run(context.Background(), []string{"export", "-source", writeConnection(t, "src.yaml", source), "-out", catalog}, &out))
+	require.NoError(t, run(context.Background(), []string{"products", "export", "-source", writeConnection(t, "src.yaml", source), "-out", catalog}, &out))
 	assert.Contains(t, out.String(), "exported 2 templates, 3 variants")
 
 	out.Reset()
-	require.NoError(t, run(context.Background(), []string{"check", "-in", catalog}, &out))
+	require.NoError(t, run(context.Background(), []string{"products", "check", "-in", catalog}, &out))
 
 	out.Reset()
 	require.NoError(t, run(context.Background(), []string{
-		"import", "-target", writeConnection(t, "dst.yaml", target), "-in", catalog, "-dry-run",
+		"products", "import", "-target", writeConnection(t, "dst.yaml", target), "-in", catalog, "-dry-run",
 	}, &out))
 	text := out.String()
 	assert.Contains(t, text, `create category "水果"`)
@@ -98,12 +98,13 @@ func TestImportRejectsBadFlagsBeforeAnyRequest(t *testing.T) {
 	ctx := context.Background()
 	var out bytes.Buffer
 
-	assert.ErrorContains(t, run(ctx, []string{"import", "-target", "t.yaml", "-in", "c.json", "-include", "nonsense"}, &out), "-include must be")
-	assert.ErrorContains(t, run(ctx, []string{"import", "-target", "t.yaml", "-in", "c.json", "-empty-code", "maybe"}, &out), "-empty-code")
-	assert.ErrorContains(t, run(ctx, []string{"import", "-target", "t.yaml", "-in", "c.json", "-sale-ok", "some"}, &out), "-sale-ok")
-	assert.ErrorContains(t, run(ctx, []string{"import", "-target", "t.yaml", "-in", "c.json", "-dry-run", "-map-out", "m.csv"}, &out), "-map-out")
-	assert.ErrorContains(t, run(ctx, []string{"import", "-in", "c.json"}, &out), "-target")
-	assert.ErrorContains(t, run(ctx, []string{"export", "-source", "s.yaml"}, &out), "-out")
+	assert.ErrorContains(t, run(ctx, []string{"products", "import", "-target", "t.yaml", "-in", "c.json", "-include", "boms"}, &out), "flag provided but not defined")
+	assert.ErrorContains(t, run(ctx, []string{"boms", "import", "-target", "t.yaml", "-in", "c.json", "-map-out", "m.csv"}, &out), "-map-out needs products")
+	assert.ErrorContains(t, run(ctx, []string{"products", "import", "-target", "t.yaml", "-in", "c.json", "-empty-code", "maybe"}, &out), "-empty-code")
+	assert.ErrorContains(t, run(ctx, []string{"products", "import", "-target", "t.yaml", "-in", "c.json", "-sale-ok", "some"}, &out), "-sale-ok")
+	assert.ErrorContains(t, run(ctx, []string{"products", "import", "-target", "t.yaml", "-in", "c.json", "-dry-run", "-map-out", "m.csv"}, &out), "-map-out")
+	assert.ErrorContains(t, run(ctx, []string{"products", "import", "-in", "c.json"}, &out), "-target")
+	assert.ErrorContains(t, run(ctx, []string{"products", "export", "-source", "s.yaml"}, &out), "-out")
 }
 
 func TestImportStopsOnProblemsAndPrintsThemAll(t *testing.T) {
@@ -119,7 +120,7 @@ func TestImportStopsOnProblemsAndPrintsThemAll(t *testing.T) {
 	require.NoError(t, writeCatalogFile(catalog, f))
 
 	var out bytes.Buffer
-	err := run(context.Background(), []string{"import", "-target", writeConnection(t, "dst.yaml", target), "-in", catalog}, &out)
+	err := run(context.Background(), []string{"products", "import", "-target", writeConnection(t, "dst.yaml", target), "-in", catalog}, &out)
 	require.Error(t, err)
 	assert.Contains(t, out.String(), `unit of measure "kg"`)
 }
@@ -164,14 +165,14 @@ func bomTargetRoutes(boms, lines string) map[string]string {
 	}
 }
 
-func exportBOMFile(t *testing.T, routes map[string]string, include string) string {
+func exportBOMFile(t *testing.T, routes map[string]string, section string) string {
 	t.Helper()
 
 	source := fakeOdoo(t, routes, &[]string{})
 	catalog := filepath.Join(t.TempDir(), "catalog.json")
 	var out bytes.Buffer
 	require.NoError(t, run(context.Background(), []string{
-		"export", "-source", writeConnection(t, "src.yaml", source), "-out", catalog, "-include", include,
+		section, "export", "-source", writeConnection(t, "src.yaml", source), "-out", catalog,
 	}, &out))
 	return catalog
 }
@@ -186,14 +187,14 @@ func TestExportBOMsWritesTheSectionAndRefusesUnsupportedFeatures(t *testing.T) {
 	assert.Equal(t, "121001090", f.BOMs[0].Lines[0].Component)
 
 	var out bytes.Buffer
-	require.NoError(t, run(context.Background(), []string{"check", "-in", catalog}, &out))
+	require.NoError(t, run(context.Background(), []string{"boms", "check", "-in", catalog}, &out))
 	assert.Contains(t, out.String(), "1 boms")
 
 	routes := bomSourceRoutes()
 	routes["/json/2/mrp.bom/search_read"] = strings.Replace(sourceBOMJSON, `"operation_ids":[]`, `"operation_ids":[3]`, 1)
 	source := fakeOdoo(t, routes, &[]string{})
 	bad := filepath.Join(t.TempDir(), "bad.json")
-	err = run(context.Background(), []string{"export", "-source", writeConnection(t, "src.yaml", source), "-out", bad, "-include", "boms"}, &out)
+	err = run(context.Background(), []string{"boms", "export", "-source", writeConnection(t, "src.yaml", source), "-out", bad}, &out)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "does not support")
 	assert.NoFileExists(t, bad)
@@ -206,13 +207,13 @@ func TestImportBOMsDryRunWritesNothingAndRealRunCreatesOneBOM(t *testing.T) {
 	target := fakeOdoo(t, bomTargetRoutes(`[]`, `[]`), &writes)
 	conn := writeConnection(t, "dst.yaml", target)
 	var out bytes.Buffer
-	require.NoError(t, run(context.Background(), []string{"import", "-target", conn, "-in", catalog, "-include", "boms", "-dry-run"}, &out))
+	require.NoError(t, run(context.Background(), []string{"boms", "import", "-target", conn, "-in", catalog, "-dry-run"}, &out))
 	assert.Contains(t, out.String(), "create bom for 273001101")
 	assert.Contains(t, out.String(), "1 to create, 0 to archive")
 	assert.Empty(t, writes)
 
 	out.Reset()
-	require.NoError(t, run(context.Background(), []string{"import", "-target", conn, "-in", catalog, "-include", "boms"}, &out))
+	require.NoError(t, run(context.Background(), []string{"boms", "import", "-target", conn, "-in", catalog}, &out))
 	assert.Equal(t, []string{"/json/2/mrp.bom/create"}, writes)
 	assert.Contains(t, out.String(), "boms: created 1, archived 0, code updated 0, unchanged 0, failed 0")
 }
@@ -225,7 +226,7 @@ func TestImportBOMsAloneListsEveryMissingProductAndWritesNothing(t *testing.T) {
 	routes["/json/2/product.product/search_read"] = `[]`
 	target := fakeOdoo(t, routes, &writes)
 	var out bytes.Buffer
-	err := run(context.Background(), []string{"import", "-target", writeConnection(t, "dst.yaml", target), "-in", catalog, "-include", "boms"}, &out)
+	err := run(context.Background(), []string{"boms", "import", "-target", writeConnection(t, "dst.yaml", target), "-in", catalog}, &out)
 	require.Error(t, err)
 	assert.Contains(t, out.String(), `product "273001101" does not exist in the target`)
 	assert.Contains(t, out.String(), `component "121001090" does not exist in the target`)
@@ -243,22 +244,22 @@ func TestImportBOMsIsIdempotent(t *testing.T) {
 	target := fakeOdoo(t, bomTargetRoutes(targetBOM, targetLines), &writes)
 	var out bytes.Buffer
 	require.NoError(t, run(context.Background(), []string{
-		"import", "-target", writeConnection(t, "dst.yaml", target), "-in", catalog, "-include", "boms", "-dry-run",
+		"boms", "import", "-target", writeConnection(t, "dst.yaml", target), "-in", catalog, "-dry-run",
 	}, &out))
 	assert.Contains(t, out.String(), "0 to create, 0 to archive, 0 code updates, 1 unchanged")
 	assert.Empty(t, writes)
 }
 
-func TestImportIncludeMustNameASectionTheFileHas(t *testing.T) {
+func TestImportNeedsTheSectionInTheFile(t *testing.T) {
 	var out bytes.Buffer
 	productsOnly := filepath.Join(t.TempDir(), "products.json")
 	require.NoError(t, writeCatalogFile(productsOnly, sampleFile()))
-	err := run(context.Background(), []string{"import", "-target", writeConnection(t, "dst.yaml", fakeOdoo(t, nil, &[]string{})), "-in", productsOnly, "-include", "boms"}, &out)
+	err := run(context.Background(), []string{"boms", "import", "-target", writeConnection(t, "dst.yaml", fakeOdoo(t, nil, &[]string{})), "-in", productsOnly}, &out)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "the file has no boms section")
 
 	bomsOnly := exportBOMFile(t, bomSourceRoutes(), "boms")
-	err = run(context.Background(), []string{"import", "-target", writeConnection(t, "dst.yaml", fakeOdoo(t, nil, &[]string{})), "-in", bomsOnly, "-include", "products"}, &out)
+	err = run(context.Background(), []string{"products", "import", "-target", writeConnection(t, "dst.yaml", fakeOdoo(t, nil, &[]string{})), "-in", bomsOnly}, &out)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "the file has no products section")
 }
@@ -279,7 +280,7 @@ func TestImportProductsOnlyNeverTouchesBOMs(t *testing.T) {
 	}, &[]string{})
 	var out bytes.Buffer
 	require.NoError(t, run(context.Background(), []string{
-		"import", "-target", writeConnection(t, "dst.yaml", target), "-in", catalog, "-include", "products", "-dry-run",
+		"products", "import", "-target", writeConnection(t, "dst.yaml", target), "-in", catalog, "-dry-run",
 	}, &out))
 	assert.NotContains(t, out.String(), "bom summary")
 }

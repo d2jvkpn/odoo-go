@@ -1,22 +1,28 @@
-# Syncing products and BOMs between Odoo databases
+# Syncing products, BOMs and partners between Odoo databases
 
-`odoo-sync` copies categories, attributes, product templates, variants and bills of materials from a
-source Odoo to a target Odoo through a JSON file. The source is the master; the target is a replica.
-It reads the source and writes the target only, and never deletes: records missing from the file are
-not removed, and products archived in the source are archived in the target.
+`odoo-sync` copies categories, attributes, product templates, variants, bills of materials and
+partners from a source Odoo to a target Odoo through JSON files. It has three command groups,
+`products`, `boms` and `partners`, each with its own file and with `export`, `check` and `import`
+commands. The source is the master; the target is a replica. It reads the source and writes the
+target only, and never deletes: records missing from the file are not removed, and records archived
+in the source are archived in the target.
 
 ```sh
 go build -o target/odoo-sync ./cmd/odoo-sync
-target/odoo-sync export -source configs/source.yaml -out data/catalog.json
-target/odoo-sync check  -in data/catalog.json
-target/odoo-sync import -target configs/target.yaml -in data/catalog.json -dry-run
-target/odoo-sync import -target configs/target.yaml -in data/catalog.json -map-out data/map.csv
+target/odoo-sync products export -source configs/source.yaml -out data/products.json
+target/odoo-sync products check  -in data/products.json
+target/odoo-sync products import -target configs/target.yaml -in data/products.json -dry-run
+target/odoo-sync products import -target configs/target.yaml -in data/products.json -map-out data/map.csv
+target/odoo-sync boms export -source configs/source.yaml -out data/boms.json
+target/odoo-sync boms import -target configs/target.yaml -in data/boms.json -dry-run
+target/odoo-sync partners export -source configs/source.yaml -out data/partners.json
+target/odoo-sync partners import -target configs/target.yaml -in data/partners.json -dry-run
 ```
 
 Connection files are read by `odoo.LoadClient` (`odoo.base_url`, `odoo.api_key`, optional
 `odoo.db`). Both databases need the sales and inventory modules, because product reads request
-`is_storable`. BOMs also need the Manufacturing module (`mrp`); on a database without it, export and
-import with `-include products`.
+`is_storable`. BOMs also need the Manufacturing module (`mrp`); on a database without it, use only
+the `products` and `partners` groups. Partners need only `base`.
 
 ## Matching
 
@@ -38,11 +44,11 @@ be matched, and they usually repeat the value combination of the variant that re
 - `-sale-ok all` (default) imports every template; `only` imports templates with `sale_ok` set.
 - `-no-create-deps` fails instead of creating missing categories, attributes and values.
 - `-map-out file.csv` writes a CSV with the columns default_code, source_variant_id,
-  target_variant_id and target_template_id. Use it to translate ids that another system
-  stored from the source.
-- `-include products|boms|all` selects sections. On export, `all` (default) writes both. On import,
-  `all` takes every section the file has; naming a section the file lacks is an error. A
-  products-only import never reads the target's BOMs.
+  target_variant_id and target_template_id. Use it to translate ids that another system stored from
+  the source. Only `products import` has it; `boms import` rejects it.
+
+`-sale-ok` belongs to `products import`; `boms import` still accepts it but ignores it. The partners
+options are described under [Partners](#partners).
 
 ## What is checked before anything is written
 
@@ -104,29 +110,76 @@ new one created, not an edited one. Two active BOMs with the same content for on
 one: the importer warns and keeps one, which also archives a duplicate that the target holds.
 Products the file has no BOM for are not touched.
 
-BOMs can be exported and imported apart from products with `-include boms`. Every product and
-component must then already exist in the target; a missing one stops the import and is listed, and
-nothing is created for it. A BOM whose product is created by the same import resolves against it,
-because BOMs are written last. Creates run first, then reference updates, then archives, so a
-product never loses its old BOM before the new one exists; if a create fails, that product keeps its
-old BOM and the failure is reported.
+Import products first, then BOMs. Every product and component must already exist in the target; a
+missing one stops the import and is listed, and nothing is created for it. Creates run first, then
+reference updates, then archives, so a product never loses its old BOM before the new one exists; if
+a create fails, that product keeps its old BOM and the failure is reported.
 
-With `-include all`, a BOM that names a product or component whose template the products side
-skipped (`-sale-ok only`, `-empty-code skip`) is skipped too and reported, not treated as missing.
-`-map-out` is refused for a BOM-only import. A `default_code` that matches several variants in the
-target stops the import.
+A `default_code` that matches several variants in the target stops the import.
 
 The import also stops on a missing unit of measure (BOM or line) and, unless `-empty-code skip`, on
 a product or component without a `default_code`. The export refuses a source BOM that has
 operations, byproducts or lines restricted by attribute value, because the file cannot carry them.
 
+## Partners
+
+`odoo-sync partners export` writes every partner, archived ones included, to a JSON file;
+`partners import` copies them into the target. The export stops with an error, naming the partner,
+when a partner has no name (typical for an unnamed invoice or delivery address); give it a name in
+the source first. The commands are `export`, `check` and `import`, and `import` takes `-dry-run`,
+`-empty-key reject|skip` and `-no-create-deps`. Partners need only the `base` module.
+
+Top-level partners are matched in the target in priority passes over the whole file. All partners
+with a `ref` are matched first; the remaining ones are then matched by `vat` among the target
+partners not already claimed, and then by `email` (case-insensitive), skipping a key that is empty
+in the file. A key that matches exactly one unclaimed target partner wins, and a key that matches
+none falls through to the next. A key that matches several unclaimed target partners stops the
+import and lists their ids, as does a pair of file partners that match the same target partner
+through the same key. A file partner whose `vat` or `email` only matches a target partner that an
+earlier pass already claimed is created as a new partner, because it is a distinct partner in the
+source. A top-level partner with none of the three keys stops the import by default;
+`-empty-key skip` skips it and its children. A child is matched below its already-matched parent by
+`type` and name, so a child of a partner created in the same run is created too. Target partners
+that have a parent never match a top-level one.
+
+A matched partner is overwritten from the file: name, `ref`, contact and address fields, `vat`,
+company registry, job position, language, notes, barcode, type, `is_company`, country, state and
+tags. Fields that already match cause no request. The active state is copied: archived partners are
+archived in the target and restored when the file says so. Archives run before restores, and after a
+company is archived the importer also restores the descendants that the file marks active, because
+Odoo archives a company's children together with it. Nothing is deleted.
+
+The import stops, before any write, when a partner's `lang` is not installed in the target. Country
+is matched by name and state by country and name; a missing one stops the import and is listed, and
+neither is created. Tags are matched by name and missing ones are created (with `-no-create-deps`
+they stop the import); parent tags are not recreated. The salesperson, company, industry and the
+create and modify dates are not exported. A state that belongs to a different country than the
+partner is left out of the file with a warning.
+
+The importer plans the whole import before writing and stops on any problem: a duplicate key in the
+file, a missing parent, a missing country, state or (with `-no-create-deps`) tag, an ambiguous
+match, or a partner without a key. `-dry-run` prints the plan (`create`, `update`, `skip`, `archive`
+and `restore` lines and a `summary:` line) and writes nothing. A real run ends with
+`created N, updated N, unchanged N, skipped N, archived N, restored N, failed N`. The real run may
+print a larger `restored` count than the dry-run's `to restore`, because it also restores the
+children of a company it archives (Odoo archives them together with the company).
+
+## Partner failures
+
+Writes are not retried and Odoo has no transaction across requests. A failed partner is reported as
+`failed:` and the run continues, and the exit status is non-zero. The children of a partner whose
+create failed, or that was not written, are reported as failed and skipped. A failed update of a
+matched parent does not skip its children. After a failed create, search the target by `ref`, `vat`
+or `email` before running again. Two imports into one target at the same time may create duplicates.
+
 ## Verification status
 
-Everything above is covered by unit tests against a fake Odoo server and by read-only runs
-(`export`, `check` and `import -dry-run`) against a real source. No import has been run against a
-real Odoo yet, so the write behavior below is **not verified**. Treat it as the intended design, and
-run the write steps in [manual-testing.md](manual-testing.md#odoo-sync-tests) on a disposable test
-database before relying on it. This section is to be updated, or removed, once they have been run.
+Everything above, partners included, is covered by unit tests against a fake Odoo server and by
+read-only runs (`export`, `check` and `import -dry-run`) against a real source. No import has been
+run against a real Odoo yet, so the write behavior below is **not verified**. Treat it as the
+intended design, and run the write steps in [manual-testing.md](manual-testing.md#odoo-sync-tests)
+on a disposable test database before relying on it. This section is to be updated, or removed, once
+they have been run.
 
 - How Odoo generates variants after attribute lines are added through JSON-2, and the write-back of
   the extra price of an attribute value.
@@ -134,6 +187,11 @@ database before relying on it. This section is to be updated, or removed, once t
   matches archiving the template.
 - The line commands that `CreateBOM` sends to create a BOM with its lines in one request.
 - `UpdateBOMCode`, the in-place update of a BOM reference.
+- Partner writes: the planning, matching and apply logic and the first import path (create with a
+  parent, tag creation, the field overwrite, archive and restore) are covered by tests against a
+  fake server. The idempotence of a second import, including how Odoo normalizes written values, is
+  **not verified**; check it on a test database (step 9 in
+  [manual-testing.md](manual-testing.md#odoo-sync-tests)).
 - Idempotence: a second import of the same file reporting no change, for products and for BOMs.
 - Whether Odoo rejects a BOM whose variant belongs to another template; the importer does not check.
 - The HTTP status Odoo returns for BOM calls without the `mrp` module ([modules.md](modules.md)
@@ -143,3 +201,4 @@ database before relying on it. This section is to be updated, or removed, once t
 
 Operations (work centers), byproducts, attribute-restricted BOM lines, stock quantities, price
 lists, taxes, images, vendor prices, and rewriting ids that other systems stored from the source.
+For partners: bank accounts, avatars, the salesperson, and the partner tag hierarchy.

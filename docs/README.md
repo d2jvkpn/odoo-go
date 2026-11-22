@@ -21,11 +21,13 @@
   subtype distinguishes public replies from internal notes. See [helpdesk.md](helpdesk.md).
 - `cmd/odoo-cli` only parses arguments and prints JSON; reusable API behavior belongs in the root
   package.
-- `cmd/odoo-sync` exports products and BOMs from one Odoo database and imports them into another,
-  matching variants by `default_code`. It uses `ListCatalogVariants`, `ListProductAttributes`,
-  `ListUoMs`, `CreateProductTemplate`, `UpdateProductTemplate`, `SetProductTemplateActive`,
-  `UpdateVariantFields`, `ListBOMs`, `CreateBOM`, `SetBOMActive` and `UpdateBOMCode` from the root
-  package. See [catalog-sync.md](catalog-sync.md).
+- `cmd/odoo-sync` exports products, BOMs and partners from one Odoo database and imports them into
+  another, through the `products`, `boms` and `partners` command groups. Products and BOMs match
+  variants by `default_code`; partners match by `ref`, `vat` and `email`. It uses
+  `ListCatalogVariants`, `ListSyncPartners`, `ListActiveLanguages`, `ListStatesByIDs`,
+  `CreatePartnerTag`, `ListProductAttributes`, `ListUoMs`, `CreateProductTemplate`,
+  `UpdateProductTemplate`, `SetProductTemplateActive`, `UpdateVariantFields`, `ListBOMs`,
+  `CreateBOM`, `SetBOMActive` and `UpdateBOMCode` from the root package. See [catalog-sync.md](catalog-sync.md).
 - `UpsertPartnerByRef` is not safe under concurrent calls for the same ref; the SDK deliberately
   adds no locking. See
   [the decision record](../.agents/decisions/2026-10-27_evol_partner-upsert-locking.md).
@@ -47,15 +49,15 @@
 - Write calls such as order, product, and partner creation, updates, stock changes, order
   confirm/cancel, delivery validation, and the generic `Call` are never retried automatically.
   `Client.Retry` (or `odoo.max_retries`) opts read-only calls (`CallRead`, `Search*`, `Get*`,
-  `GetProductStock`, `ListStockLocations`, `ListCountries`, `ListPartnerTags`) into retries of
-  transient failures only.
+  `GetProductStock`, `ListStockLocations`, `ListCountries`, `ListPartnerTags`,
+  `ListActiveLanguages`) into retries of transient failures only.
 
 ## Index
 
 - [README.md](../README.md): CLI and Go API usage, with examples for every endpoint.
 - [helpdesk.md](helpdesk.md): core helpdesk SDK/CLI operations, inputs and module requirements.
-- [catalog-sync.md](catalog-sync.md): `odoo-sync` export and import of products and BOMs between
-  databases.
+- [catalog-sync.md](catalog-sync.md): `odoo-sync` export and import of products, BOMs and
+  partners between databases.
 - [order-flow.md](order-flow.md): placing orders with several shipping addresses per customer, and
   creating child address contacts idempotently.
 - [modules.md](modules.md): Odoo modules each feature depends on, by technical and Apps name.

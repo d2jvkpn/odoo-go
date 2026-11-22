@@ -35,3 +35,23 @@ func TestListPartnerTagsEmptyAndError(t *testing.T) {
 	_, err = client.ListPartnerTags(context.Background())
 	assert.ErrorContains(t, err, "list partner tags")
 }
+
+func TestCreatePartnerTag(t *testing.T) {
+	client := orderTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/json/2/res.partner.category/create", r.URL.Path)
+		assertJSON(t, requestParams(t, r), `{"vals_list":[{"name":"VIP"}]}`)
+		fmt.Fprint(w, `[5]`)
+	})
+	id, err := client.CreatePartnerTag(context.Background(), "VIP")
+	require.NoError(t, err)
+	assert.Equal(t, 5, id)
+
+	_, err = client.CreatePartnerTag(context.Background(), "  ")
+	assert.ErrorContains(t, err, "name must not be empty")
+}
+
+func TestCreatePartnerTagRejectsUnexpectedResponse(t *testing.T) {
+	client := orderTestClient(t, func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, `[]`) })
+	_, err := client.CreatePartnerTag(context.Background(), "VIP")
+	assert.ErrorIs(t, err, ErrUnexpectedResponse)
+}
