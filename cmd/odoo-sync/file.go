@@ -6,20 +6,20 @@ import (
 	"fmt"
 	"math"
 	"os"
-	"slices"
 	"sort"
 	"strings"
 )
 
 // formatVersion is the only export file format this tool reads and writes.
-const formatVersion = 1
+const formatVersion = 2
 
 // CatalogFile is the export file. Source ids are records only and are never used to match.
 type CatalogFile struct {
 	Format     int             `json:"format"`
 	ExportedAt string          `json:"exported_at"`
-	Include    []string        `json:"include"`
+	Section    string          `json:"section"`
 	Source     FileSource      `json:"source"`
+	Units      []FileUoM       `json:"units,omitempty"`
 	Categories []FileCategory  `json:"categories,omitempty"`
 	Attributes []FileAttribute `json:"attributes,omitempty"`
 	Templates  []FileTemplate  `json:"templates,omitempty"`
@@ -30,6 +30,14 @@ type CatalogFile struct {
 type FileSource struct {
 	Name    string `json:"name"`
 	BaseURL string `json:"base_url"`
+}
+
+// FileUoM describes an Odoo 19 unit. RelativeTo names its reference unit;
+// an empty value means this is a root unit with factor 1.
+type FileUoM struct {
+	Name           string  `json:"name"`
+	RelativeTo     string  `json:"relative_to,omitempty"`
+	RelativeFactor float64 `json:"relative_factor"`
 }
 
 // FileCategory is a product category by full path, for example "蔬菜 / 瓜果茄果 / 番茄类".
@@ -117,7 +125,7 @@ type FileBOM struct {
 
 // HasSection reports whether the file declares the section ("products" or "boms").
 func (f *CatalogFile) HasSection(name string) bool {
-	return slices.Contains(f.Include, name)
+	return f.Section == name || f.Section == "all"
 }
 
 func readCatalogFile(path string) (*CatalogFile, error) {
@@ -179,6 +187,10 @@ func (f *CatalogFile) Validate() []string {
 	if f.Format != formatVersion {
 		return []string{fmt.Sprintf("unsupported format %d: this tool reads format %d", f.Format, formatVersion)}
 	}
+	if f.Section != "products" && f.Section != "boms" && f.Section != "all" {
+		problems = append(problems, fmt.Sprintf("section must be products, boms or all, got %q", f.Section))
+	}
+	problems = append(problems, f.validateUnits()...)
 	for _, t := range f.Templates {
 		label := fmt.Sprintf("template %d %q", t.SourceID, t.Name)
 		if strings.TrimSpace(t.Name) == "" {
@@ -238,6 +250,46 @@ func (f *CatalogFile) Validate() []string {
 		}
 	}
 	return append(problems, f.validateBOMs()...)
+}
+
+func (f *CatalogFile) validateUnits() []string {
+	var (
+		problems []string
+		units    = make(map[string]FileUoM, len(f.Units))
+	)
+	for _, u := range f.Units {
+		if strings.TrimSpace(u.Name) == "" {
+			problems = append(problems, "unit name is empty")
+			continue
+		}
+		if _, found := units[u.Name]; found {
+			problems = append(problems, fmt.Sprintf("unit %q appears twice", u.Name))
+		}
+		units[u.Name] = u
+		if math.IsNaN(u.RelativeFactor) || math.IsInf(u.RelativeFactor, 0) || u.RelativeFactor <= 0 ||
+			(u.RelativeTo == "" && u.RelativeFactor != 1) {
+			problems = append(problems, fmt.Sprintf("unit %q has invalid relative_factor", u.Name))
+		}
+	}
+	for _, u := range f.Units {
+		if u.RelativeTo != "" {
+			if _, found := units[u.RelativeTo]; !found {
+				problems = append(problems, fmt.Sprintf("unit %q references missing unit %q", u.Name, u.RelativeTo))
+			}
+		}
+		seen := make(map[string]bool)
+		for name := u.Name; name != ""; name = units[name].RelativeTo {
+			if seen[name] {
+				problems = append(problems, fmt.Sprintf("unit %q has a reference cycle", u.Name))
+				break
+			}
+			seen[name] = true
+			if _, found := units[name]; !found {
+				break
+			}
+		}
+	}
+	return problems
 }
 
 func (f *CatalogFile) validateBOMs() []string {

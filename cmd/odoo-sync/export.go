@@ -13,6 +13,7 @@ import (
 // catalogSource is what the exporter and the snapshot loader read from an Odoo database.
 type catalogSource interface {
 	ListCatalogVariants(ctx context.Context, includeArchived bool) ([]odoo.CatalogVariant, error)
+	ListSyncUoMs(ctx context.Context) ([]odoo.SyncUoM, error)
 	ProductAttributeValues(ctx context.Context, ids []int) (map[int]odoo.ProductAttributeValue, error)
 	ListBOMs(ctx context.Context, includeArchived bool) ([]odoo.BOM, error)
 }
@@ -20,14 +21,14 @@ type catalogSource interface {
 // buildExport reads every variant, active and archived, and groups them by template. An archived
 // variant without default_code cannot be matched in another database and only repeats the value
 // combination of the variant that replaced it, so it is left out; omitted counts them. The result
-// is sorted so that exporting the same data twice gives the same file. include is "products", "boms"
+// is sorted so that exporting the same data twice gives the same file. section is "products", "boms"
 // or "all"; BOMs need the variants too, for the codes they reference.
 func buildExport(
 	ctx context.Context,
 	src catalogSource,
 	name, baseURL string,
 	now time.Time,
-	include string,
+	section string,
 ) (*CatalogFile, int, error) {
 	var (
 		omitted  int
@@ -38,23 +39,17 @@ func buildExport(
 
 	out = &CatalogFile{
 		Format: formatVersion, ExportedAt: now.UTC().Format(time.RFC3339),
-		Source: FileSource{Name: name, BaseURL: baseURL},
-	}
-	if include != "boms" {
-		out.Include = append(out.Include, "products")
-	}
-	if include != "products" {
-		out.Include = append(out.Include, "boms")
+		Section: section, Source: FileSource{Name: name, BaseURL: baseURL},
 	}
 	if variants, err = src.ListCatalogVariants(ctx, true); err != nil {
 		return nil, 0, fmt.Errorf("read source variants: %w", err)
 	}
-	if include != "boms" {
+	if section != "boms" {
 		if omitted, err = buildProducts(ctx, src, out, variants); err != nil {
 			return nil, 0, err
 		}
 	}
-	if include != "products" {
+	if section != "products" {
 		var boms []odoo.BOM
 
 		if boms, err = src.ListBOMs(ctx, true); err != nil {
@@ -64,7 +59,81 @@ func buildExport(
 			return nil, 0, err
 		}
 	}
+	if out.Units, err = exportUnits(ctx, src, out); err != nil {
+		return nil, 0, fmt.Errorf("export units: %w", err)
+	}
 	return out, omitted, nil
+}
+
+// exportUnits includes only units named by exported records and their reference ancestors.
+func exportUnits(ctx context.Context, src catalogSource, file *CatalogFile) ([]FileUoM, error) {
+	var (
+		all    []odoo.SyncUoM
+		out    []FileUoM
+		err    error
+		byName = make(map[string][]odoo.SyncUoM)
+		byID   = make(map[int]odoo.SyncUoM)
+		needed = make(map[string]bool)
+		state  = make(map[int]int)
+		used   = make(map[string]int)
+	)
+	for _, t := range file.Templates {
+		needed[t.UoM] = true
+	}
+	for _, b := range file.BOMs {
+		needed[b.UoM] = true
+		for _, l := range b.Lines {
+			needed[l.UoM] = true
+		}
+	}
+	if len(needed) == 0 {
+		return nil, nil
+	}
+	if all, err = src.ListSyncUoMs(ctx); err != nil {
+		return nil, err
+	}
+	for _, u := range all {
+		byID[u.ID] = u
+		byName[u.Name] = append(byName[u.Name], u)
+	}
+	var add func(int) error
+	add = func(id int) error {
+		if state[id] == 2 {
+			return nil
+		}
+		if state[id] == 1 {
+			return fmt.Errorf("unit %d has a reference cycle", id)
+		}
+		u, found := byID[id]
+		if !found {
+			return fmt.Errorf("reference unit %d does not exist", id)
+		}
+		if other, found := used[u.Name]; found && other != id {
+			return fmt.Errorf("unit name %q belongs to multiple source units", u.Name)
+		}
+		used[u.Name] = id
+		state[id] = 1
+		parent := ""
+		if u.RelativeTo.ID != 0 {
+			if err := add(u.RelativeTo.ID); err != nil {
+				return err
+			}
+			parent = byID[u.RelativeTo.ID].Name
+		}
+		out = append(out, FileUoM{Name: u.Name, RelativeTo: parent, RelativeFactor: u.RelativeFactor})
+		state[id] = 2
+		return nil
+	}
+	for _, name := range sortedKeys(needed) {
+		rows := byName[name]
+		if len(rows) != 1 {
+			return nil, fmt.Errorf("unit %q matches %d source units", name, len(rows))
+		}
+		if err := add(rows[0].ID); err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
 }
 
 // buildProducts fills the categories, attributes and templates of out from the variants and returns

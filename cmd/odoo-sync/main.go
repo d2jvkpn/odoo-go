@@ -18,12 +18,14 @@ import (
 
 const usage = `Usage:
   odoo-sync products export -source source.yaml -out products.json
-  odoo-sync products check  -in products.json
+  odoo-sync products check  -in products.json [-target target.yaml] [-empty-code reject|skip]
+                            [-sale-ok all|only] [-no-create-deps]
   odoo-sync products import -target target.yaml -in products.json [-dry-run] [-empty-code reject|skip]
                             [-sale-ok all|only] [-no-create-deps] [-map-out map.csv]
   odoo-sync boms export|check|import   same flags as products, without -sale-ok and -map-out
-  odoo-sync partners export -source source.yaml -out partners.json
-  odoo-sync partners check  -in partners.json
+  odoo-sync partners export -source source.yaml -out partners.json [--infer-country-from-state]
+  odoo-sync partners check  -in partners.json [-target target.yaml] [-empty-key reject|skip]
+                            [-no-create-deps]
   odoo-sync partners import -target target.yaml -in partners.json [-dry-run]
                             [-empty-key reject|skip] [-no-create-deps]
 
@@ -74,7 +76,7 @@ func runCatalog(ctx context.Context, section string, args []string, out io.Write
 	}
 	switch args[0] {
 	case "check":
-		return runCheck(section, args[1:], out)
+		return runCheck(ctx, section, args[1:], out)
 	case "export":
 		return runExport(ctx, section, args[1:], out)
 	case "import":
@@ -84,19 +86,30 @@ func runCatalog(ctx context.Context, section string, args []string, out io.Write
 	}
 }
 
-func runCheck(section string, args []string, out io.Writer) error {
+func runCheck(ctx context.Context, section string, args []string, out io.Writer) error {
 	var (
-		flags    *flag.FlagSet
-		in       *string
-		f        *CatalogFile
-		problems []string
-		variants int
-		err      error
+		flags        *flag.FlagSet
+		in           *string
+		target       *string
+		emptyCode    *string
+		saleOK       *string
+		noCreateDeps *bool
+		f            *CatalogFile
+		client       *odoo.Client
+		snap         *Snapshot
+		opt          importOptions
+		problems     []string
+		variants     int
+		err          error
 	)
 
 	flags = flag.NewFlagSet("odoo-sync "+section+" check", flag.ContinueOnError)
 	flags.SetOutput(out)
 	in = flags.String("in", "", "catalog file")
+	target = flags.String("target", "", "optional target connection file for import preflight")
+	emptyCode = flags.String("empty-code", emptyCodeReject, "variants without default_code: reject or skip")
+	saleOK = flags.String("sale-ok", saleOKAll, "which templates to check: all or only (sale_ok)")
+	noCreateDeps = flags.Bool("no-create-deps", false, "fail if a target dependency is missing; requires -target")
 	if err = flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
@@ -106,22 +119,52 @@ func runCheck(section string, args []string, out io.Writer) error {
 	if *in == "" {
 		return errors.New("-in is required")
 	}
+	if *emptyCode != emptyCodeReject && *emptyCode != emptyCodeSkip {
+		return fmt.Errorf("-empty-code must be reject or skip, got %q", *emptyCode)
+	}
+	if *saleOK != saleOKAll && *saleOK != saleOKOnly {
+		return fmt.Errorf("-sale-ok must be all or only, got %q", *saleOK)
+	}
+	if *noCreateDeps && *target == "" {
+		return errors.New("-no-create-deps requires -target")
+	}
 	if f, err = readCatalogFile(*in); err != nil {
 		return err
+	}
+	if problems = f.Validate(); len(problems) > 0 {
+		return reportProblems(out, problems)
 	}
 	if !f.HasSection(section) {
 		return fmt.Errorf("the file has no %s section", section)
 	}
-	if problems = f.Validate(); len(problems) > 0 {
-		for _, p := range problems {
-			fmt.Fprintln(out, "-", p)
+	opt = importOptions{
+		EmptyCode: *emptyCode, SaleOK: *saleOK, NoCreateDeps: *noCreateDeps,
+		NoProducts: section == "boms", BOMs: section == "boms" && len(f.BOMs) > 0,
+	}
+	if problems = catalogPolicyProblems(f, section, opt); len(problems) > 0 {
+		return reportProblems(out, problems)
+	}
+	if *target != "" {
+		if client, err = odoo.LoadClient(*target); err != nil {
+			return err
 		}
-		return fmt.Errorf("%d problems found", len(problems))
+		if snap, err = loadSnapshot(ctx, client, opt.BOMs); err != nil {
+			return err
+		}
+		if _, problems = buildPlan(f, snap, opt); len(problems) > 0 {
+			return reportProblems(out, problems)
+		}
 	}
 	for _, t := range f.Templates {
 		variants += len(t.Variants)
 	}
-	fmt.Fprintf(out, "ok: %d templates, %d variants, %d boms\n", len(f.Templates), variants, len(f.BOMs))
+	if *target == "" {
+		fmt.Fprintf(out, "ok: %d templates, %d variants, %d boms (file checks only; use -target for import preflight)\n",
+			len(f.Templates), variants, len(f.BOMs))
+	} else {
+		fmt.Fprintf(out, "ok: %d templates, %d variants, %d boms (target preflight passed; nothing was written)\n",
+			len(f.Templates), variants, len(f.BOMs))
+	}
 	return nil
 }
 
@@ -133,6 +176,7 @@ func runExport(ctx context.Context, section string, args []string, out io.Writer
 		client  *odoo.Client
 		f       *CatalogFile
 		count   int
+		uncoded int
 		omitted int
 		err     error
 	)
@@ -162,10 +206,22 @@ func runExport(ctx context.Context, section string, args []string, out io.Writer
 	}
 	for _, t := range f.Templates {
 		count += len(t.Variants)
+		for _, v := range t.Variants {
+			if v.Active && v.DefaultCode == "" {
+				uncoded++
+			}
+		}
 	}
 	fmt.Fprintf(out, "exported %d templates, %d variants, %d boms to %s\n", len(f.Templates), count, len(f.BOMs), *dest)
 	if omitted > 0 {
 		fmt.Fprintf(out, "omitted %d archived variants without default_code\n", omitted)
+	}
+	if uncoded > 0 {
+		if uncoded == 1 {
+			fmt.Fprintln(out, "warning: 1 active variant without default_code was exported; products import rejects it by default")
+		} else {
+			fmt.Fprintf(out, "warning: %d active variants without default_code were exported; products import rejects them by default\n", uncoded)
+		}
 	}
 	return nil
 }
@@ -224,14 +280,14 @@ func runImport(ctx context.Context, section string, args []string, out io.Writer
 	if f, err = readCatalogFile(*in); err != nil {
 		return err
 	}
+	if problems = f.Validate(); len(problems) > 0 {
+		return reportProblems(out, problems)
+	}
 	if products, opt.BOMs, err = importSections(f, section); err != nil {
 		return err
 	}
 	opt.NoProducts = !products
 	opt.BOMs = opt.BOMs && len(f.BOMs) > 0 // nothing to reconcile, so the target's BOMs are not read
-	if problems = f.Validate(); len(problems) > 0 {
-		return reportProblems(out, problems)
-	}
 	if client, err = odoo.LoadClient(*target); err != nil {
 		return err
 	}

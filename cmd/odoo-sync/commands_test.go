@@ -54,11 +54,14 @@ const sourceVariantsJSON = `[` +
 	`"categ_id":[7,"蔬菜 / 番茄类"],"sale_ok":true,"is_storable":true,"type":"consu","uom_id":[1,"kg"],` +
 	`"description_sale":false,"barcode":false,"weight":0.0,"volume":0.0,"product_template_variant_value_ids":[31],"active":true}]`
 
+const unitKGJSON = `[{"id":1,"name":"kg","relative_uom_id":false,"relative_factor":1,"active":true}]`
+
 func TestExportThenDryRunImportCreatesNothing(t *testing.T) {
 	var sourceWrites, targetWrites []string
 
 	source := fakeOdoo(t, map[string]string{
 		"/json/2/product.product/search_read": sourceVariantsJSON,
+		"/json/2/uom.uom/search_read":         unitKGJSON,
 		"/json/2/mrp.bom/search_read":         `[]`,
 		"/json/2/product.template.attribute.value/search_read": `[{"id":30,"attribute_id":[3,"规格"],"name":"1kg","price_extra":0.0},` +
 			`{"id":31,"attribute_id":[3,"规格"],"name":"1.5kg","price_extra":2.5}]`,
@@ -67,7 +70,7 @@ func TestExportThenDryRunImportCreatesNothing(t *testing.T) {
 		"/json/2/product.product/search_read":         `[]`,
 		"/json/2/product.attribute/search_read":       `[]`,
 		"/json/2/product.attribute.value/search_read": `[]`,
-		"/json/2/uom.uom/search_read":                 `[{"id":1,"name":"kg"}]`,
+		"/json/2/uom.uom/search_read":                 unitKGJSON,
 		"/json/2/product.category/search_read": `[{"id":6,"name":"蔬菜","complete_name":"蔬菜","parent_id":false},` +
 			`{"id":7,"name":"番茄类","complete_name":"蔬菜 / 番茄类","parent_id":[6,"蔬菜"]}]`,
 	}, &targetWrites)
@@ -92,6 +95,28 @@ func TestExportThenDryRunImportCreatesNothing(t *testing.T) {
 	assert.Contains(t, text, "summary: 2 to create")
 	assert.Empty(t, sourceWrites)
 	assert.Empty(t, targetWrites)
+}
+
+func TestProductsExportWarnsAboutActiveVariantsWithoutDefaultCode(t *testing.T) {
+	var writes []string
+	source := fakeOdoo(t, map[string]string{
+		"/json/2/product.product/search_read": `[` +
+			`{"id":10,"product_tmpl_id":[1,"Active"],"name":"Active","default_code":false,` +
+			`"categ_id":false,"uom_id":[1,"kg"],"active":true},` +
+			`{"id":11,"product_tmpl_id":[2,"Archived"],"name":"Archived","default_code":false,` +
+			`"categ_id":false,"uom_id":[1,"kg"],"active":false}]`,
+		"/json/2/product.template.attribute.value/search_read": `[]`,
+		"/json/2/uom.uom/search_read":                          unitKGJSON,
+	}, &writes)
+	var out bytes.Buffer
+	catalog := filepath.Join(t.TempDir(), "catalog.json")
+	err := run(context.Background(), []string{
+		"products", "export", "-source", writeConnection(t, "src.yaml", source), "-out", catalog,
+	}, &out)
+	require.NoError(t, err)
+	assert.Contains(t, out.String(), "warning: 1 active variant without default_code was exported")
+	assert.Contains(t, out.String(), "omitted 1 archived variants without default_code")
+	assert.Empty(t, writes)
 }
 
 func TestImportRejectsBadFlagsBeforeAnyRequest(t *testing.T) {
@@ -146,6 +171,7 @@ const sourceBOMLinesJSON = `[{"id":1,"bom_id":[258,"x"],"product_id":[500,"y"],"
 func bomSourceRoutes() map[string]string {
 	return map[string]string{
 		"/json/2/product.product/search_read": variantsJSON([3]any{10688, 1487, "273001101"}, [3]any{500, 9, "121001090"}),
+		"/json/2/uom.uom/search_read":         unitKGJSON,
 		"/json/2/mrp.bom/search_read":         sourceBOMJSON,
 		"/json/2/mrp.bom.line/search_read":    sourceBOMLinesJSON,
 	}
@@ -157,7 +183,7 @@ func bomTargetRoutes(boms, lines string) map[string]string {
 		"/json/2/product.product/search_read":         variantsJSON([3]any{7001, 8001, "273001101"}, [3]any{7002, 8002, "121001090"}),
 		"/json/2/product.attribute/search_read":       `[]`,
 		"/json/2/product.attribute.value/search_read": `[]`,
-		"/json/2/uom.uom/search_read":                 `[{"id":1,"name":"kg"}]`,
+		"/json/2/uom.uom/search_read":                 unitKGJSON,
 		"/json/2/product.category/search_read":        `[]`,
 		"/json/2/mrp.bom/search_read":                 boms,
 		"/json/2/mrp.bom.line/search_read":            lines,
@@ -181,7 +207,7 @@ func TestExportBOMsWritesTheSectionAndRefusesUnsupportedFeatures(t *testing.T) {
 	catalog := exportBOMFile(t, bomSourceRoutes(), "boms")
 	f, err := readCatalogFile(catalog)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"boms"}, f.Include)
+	assert.Equal(t, "boms", f.Section)
 	require.Len(t, f.BOMs, 1)
 	assert.Equal(t, "273001101", f.BOMs[0].Product.DefaultCode)
 	assert.Equal(t, "121001090", f.BOMs[0].Lines[0].Component)
@@ -266,7 +292,7 @@ func TestImportNeedsTheSectionInTheFile(t *testing.T) {
 
 func TestImportProductsOnlyNeverTouchesBOMs(t *testing.T) {
 	f := sampleFile()
-	f.Include = []string{"products", "boms"}
+	f.Section = "all"
 	f.BOMs = []FileBOM{fBOM(1, "A-1", "", fLine("273001101", 1))}
 	catalog := filepath.Join(t.TempDir(), "catalog.json")
 	require.NoError(t, writeCatalogFile(catalog, f))
@@ -275,7 +301,7 @@ func TestImportProductsOnlyNeverTouchesBOMs(t *testing.T) {
 		"/json/2/product.product/search_read":         `[]`,
 		"/json/2/product.attribute/search_read":       `[]`,
 		"/json/2/product.attribute.value/search_read": `[]`,
-		"/json/2/uom.uom/search_read":                 `[{"id":1,"name":"kg"}]`,
+		"/json/2/uom.uom/search_read":                 unitKGJSON,
 		"/json/2/product.category/search_read":        `[{"id":7,"name":"番茄类","complete_name":"蔬菜 / 番茄类","parent_id":false}]`,
 	}, &[]string{})
 	var out bytes.Buffer

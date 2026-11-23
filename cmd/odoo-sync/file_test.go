@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -10,7 +11,7 @@ import (
 
 func sampleFile() *CatalogFile {
 	return &CatalogFile{
-		Format: formatVersion, ExportedAt: "2026-11-21T10:00:00Z", Include: []string{"products"},
+		Format: formatVersion, ExportedAt: "2026-11-21T10:00:00Z", Section: "products",
 		Source:     FileSource{Name: "src", BaseURL: "http://odoo.example"},
 		Categories: []FileCategory{{Path: "蔬菜 / 番茄类"}},
 		Attributes: []FileAttribute{{Name: "规格", Values: []string{"1kg", "1.5kg"}}},
@@ -37,6 +38,10 @@ func sampleFile() *CatalogFile {
 func TestCatalogFileRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "catalog.json")
 	require.NoError(t, writeCatalogFile(path, sampleFile()))
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), `"section": "products"`)
+	assert.NotContains(t, string(data), `"include"`)
 	got, err := readCatalogFile(path)
 	require.NoError(t, err)
 	assert.Equal(t, sampleFile(), got)
@@ -52,7 +57,7 @@ func TestValidateReportsEveryProblem(t *testing.T) {
 		mutate func(f *CatalogFile)
 		want   string
 	}{
-		{"format", func(f *CatalogFile) { f.Format = 2 }, "unsupported format 2"},
+		{"format", func(f *CatalogFile) { f.Format = 1 }, "unsupported format 1"},
 		{"blank name", func(f *CatalogFile) { f.Templates[0].Name = " " }, "name is empty"},
 		{"no variants", func(f *CatalogFile) { f.Templates[1].Variants = nil }, "no variants"},
 		{"duplicate code", func(f *CatalogFile) { f.Templates[1].Variants[0].DefaultCode = "A-1" }, `default_code "A-1" appears in templates`},
@@ -93,7 +98,7 @@ func TestCatalogFileWithBOMsRoundTripsAndHasSections(t *testing.T) {
 	tmpl.SourceID, tmpl.Product = 259, nil
 	tmpl.Template.DefaultCodes = []string{"A-1", "A-2"}
 	f.BOMs = []FileBOM{sampleBOM(), tmpl}
-	f.Include = []string{"products", "boms"}
+	f.Section = "all"
 
 	path := filepath.Join(t.TempDir(), "catalog.json")
 	require.NoError(t, writeCatalogFile(path, f))

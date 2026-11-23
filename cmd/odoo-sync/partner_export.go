@@ -20,12 +20,14 @@ type partnerSource interface {
 
 // buildPartnerExport reads every partner, archived ones included, and returns the file sorted by
 // source id, plus warnings. A state whose country is not the partner's country, and a tag that is
-// archived, are left out with a warning so the file always validates.
+// archived, are left out with a warning so the file always validates. With inferCountryFromState,
+// a missing partner country is filled in the file from the state record's country.
 func buildPartnerExport(
 	ctx context.Context,
 	src partnerSource,
 	name, baseURL string,
 	now time.Time,
+	inferCountryFromState bool,
 ) (*PartnersFile, []string, error) {
 	var (
 		partners []odoo.SyncPartner
@@ -86,6 +88,14 @@ func buildPartnerExport(
 			switch s, ok := stateOf[p.State.ID]; {
 			case !ok:
 				warnings = append(warnings, fmt.Sprintf("partner %d %q: state %d was not found and is not exported", p.ID, p.Name, p.State.ID))
+			case s.Country.ID == 0 || s.Country.Name == "":
+				warnings = append(warnings, fmt.Sprintf("partner %d %q: state %q has no country and is not exported", p.ID, p.Name, s.Name))
+			case p.Country.ID == 0 && inferCountryFromState:
+				fp.Country, fp.State = s.Country.Name, s.Name
+				warnings = append(warnings, fmt.Sprintf(
+					"partner %d %q: inferred country %q from state %q in the export",
+					p.ID, p.Name, s.Country.Name, s.Name,
+				))
 			case s.Country.ID != p.Country.ID:
 				warnings = append(warnings, fmt.Sprintf("partner %d %q: state %q belongs to country %q, not to the partner's country %q, and is not exported",
 					p.ID, p.Name, s.Name, s.Country.Name, p.Country.Name))

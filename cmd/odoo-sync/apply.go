@@ -15,6 +15,7 @@ import (
 
 // targetAPI is what the applier writes to; *odoo.Client satisfies it. Writes are never retried.
 type targetAPI interface {
+	CreateSyncUoM(ctx context.Context, name string, relativeTo int, factor float64) (int, error)
 	CreateProductCategory(ctx context.Context, kind odoo.CategoryType, in odoo.CreateProductCategoryRequest) (int, error)
 	CreateProductAttribute(ctx context.Context, name string) (int, error)
 	CreateProductAttributeValues(ctx context.Context, attributeID int, names []string) ([]int, error)
@@ -64,7 +65,7 @@ func applyPlan(ctx context.Context, api targetAPI, snap *Snapshot, p *Plan) (*Re
 	var (
 		a = &applier{
 			api: api, catIDs: maps.Clone(snap.Categories), attrIDs: make(map[string]int),
-			valIDs: make(map[string]map[string]int), uomIDs: snap.UoMs, res: &Result{Skipped: len(p.Skipped)},
+			valIDs: make(map[string]map[string]int), uomIDs: maps.Clone(snap.UoMs), res: &Result{Skipped: len(p.Skipped)},
 		}
 		err error
 	)
@@ -72,6 +73,9 @@ func applyPlan(ctx context.Context, api targetAPI, snap *Snapshot, p *Plan) (*Re
 	for name, attr := range snap.Attributes {
 		a.attrIDs[name] = attr.ID
 		a.valIDs[name] = maps.Clone(attr.Values)
+	}
+	if err = a.createUnits(ctx, p.NewUoMs); err != nil {
+		return a.res, err
 	}
 	if err = a.createCategories(ctx, p.NewCategories); err != nil {
 		return a.res, err
@@ -94,6 +98,24 @@ func applyPlan(ctx context.Context, api targetAPI, snap *Snapshot, p *Plan) (*Re
 		}
 	}
 	return a.res, nil
+}
+
+func (a *applier) createUnits(ctx context.Context, units []FileUoM) error {
+	for _, u := range units {
+		parentID := 0
+		if u.RelativeTo != "" {
+			parentID = a.uomIDs[u.RelativeTo]
+			if parentID == 0 {
+				return fmt.Errorf("create unit %q: reference unit %q is missing", u.Name, u.RelativeTo)
+			}
+		}
+		id, err := a.api.CreateSyncUoM(ctx, u.Name, parentID, u.RelativeFactor)
+		if err != nil {
+			return fmt.Errorf("create unit %q: %w", u.Name, err)
+		}
+		a.uomIDs[u.Name] = id
+	}
+	return nil
 }
 
 // bomProduct is a product of the target: its variant and its template.

@@ -51,7 +51,7 @@ func TestBuildPartnerExportMapsFieldsAndSortsTags(t *testing.T) {
 		states:   []odoo.StateInfo{{ID: 1, Name: "Oslo", Code: "03", Country: odoo.Many2One{ID: 160, Name: "Norway"}}},
 	}
 
-	f, warnings, err := buildPartnerExport(context.Background(), src, "src", "http://src", time.Date(2026, 11, 22, 0, 0, 0, 0, time.UTC))
+	f, warnings, err := buildPartnerExport(context.Background(), src, "src", "http://src", time.Date(2026, 11, 22, 0, 0, 0, 0, time.UTC), false)
 	require.NoError(t, err)
 	assert.Empty(t, warnings)
 	assert.Equal(t, "2026-11-22T00:00:00Z", f.ExportedAt)
@@ -76,19 +76,43 @@ func TestBuildPartnerExportDropsAStateOfAnotherCountryWithAWarning(t *testing.T)
 		partners: []odoo.SyncPartner{p},
 		states:   []odoo.StateInfo{{ID: 13, Name: "California", Country: odoo.Many2One{ID: 233, Name: "United States"}}},
 	}
-	f, warnings, err := buildPartnerExport(context.Background(), src, "s", "u", time.Now())
+	f, warnings, err := buildPartnerExport(context.Background(), src, "s", "u", time.Now(), false)
 	require.NoError(t, err)
 	assert.Empty(t, f.Partners[0].State)
 	assert.Equal(t, "China", f.Partners[0].Country)
 	require.Len(t, warnings, 1)
 	assert.Contains(t, warnings[0], "state")
 	assert.Empty(t, f.Validate())
+	f, warnings, err = buildPartnerExport(context.Background(), src, "s", "u", time.Now(), true)
+	require.NoError(t, err)
+	assert.Equal(t, "China", f.Partners[0].Country)
+	assert.Empty(t, f.Partners[0].State)
+	require.Len(t, warnings, 1)
+}
+
+func TestBuildPartnerExportInfersMissingCountryFromStateWhenRequested(t *testing.T) {
+	p := srcPartner(18, "杭州门店", 0, true)
+	p.State = odoo.Many2One{ID: 31, Name: "浙江省"}
+	src := fakePartnerSource{
+		partners: []odoo.SyncPartner{p},
+		states: []odoo.StateInfo{{
+			ID: 31, Name: "浙江省", Country: odoo.Many2One{ID: 48, Name: "China"},
+		}},
+	}
+	f, warnings, err := buildPartnerExport(context.Background(), src, "s", "u", time.Now(), true)
+	require.NoError(t, err)
+	require.Len(t, f.Partners, 1)
+	assert.Equal(t, "China", f.Partners[0].Country)
+	assert.Equal(t, "浙江省", f.Partners[0].State)
+	require.Len(t, warnings, 1)
+	assert.Contains(t, warnings[0], "inferred country")
+	assert.Empty(t, f.Validate())
 }
 
 func TestBuildPartnerExportWarnsAboutAnUnknownTag(t *testing.T) {
 	p := srcPartner(1, "Tagged", 0, true)
 	p.CategoryIDs = []int{99}
-	f, warnings, err := buildPartnerExport(context.Background(), fakePartnerSource{partners: []odoo.SyncPartner{p}}, "s", "u", time.Now())
+	f, warnings, err := buildPartnerExport(context.Background(), fakePartnerSource{partners: []odoo.SyncPartner{p}}, "s", "u", time.Now(), false)
 	require.NoError(t, err)
 	assert.Empty(t, f.Partners[0].Categories)
 	require.Len(t, warnings, 1)
@@ -96,9 +120,9 @@ func TestBuildPartnerExportWarnsAboutAnUnknownTag(t *testing.T) {
 }
 
 func TestBuildPartnerExportFailsOnABlankNameOrMissingParent(t *testing.T) {
-	_, _, err := buildPartnerExport(context.Background(), fakePartnerSource{partners: []odoo.SyncPartner{srcPartner(1, " ", 0, true)}}, "s", "u", time.Now())
+	_, _, err := buildPartnerExport(context.Background(), fakePartnerSource{partners: []odoo.SyncPartner{srcPartner(1, " ", 0, true)}}, "s", "u", time.Now(), false)
 	assert.ErrorContains(t, err, "has no name")
-	_, _, err = buildPartnerExport(context.Background(), fakePartnerSource{partners: []odoo.SyncPartner{srcPartner(2, "Child", 77, true)}}, "s", "u", time.Now())
+	_, _, err = buildPartnerExport(context.Background(), fakePartnerSource{partners: []odoo.SyncPartner{srcPartner(2, "Child", 77, true)}}, "s", "u", time.Now(), false)
 	assert.ErrorContains(t, err, "parent 77")
 }
 
@@ -110,7 +134,7 @@ func TestBuildPartnerExportDropsDuplicateTagNames(t *testing.T) {
 		tags:     []odoo.PartnerTag{{ID: 5, Name: "VIP"}, {ID: 6, Name: "Retail"}, {ID: 7, Name: "VIP"}},
 	}
 
-	f, _, err := buildPartnerExport(context.Background(), src, "src", "http://src", time.Now())
+	f, _, err := buildPartnerExport(context.Background(), src, "src", "http://src", time.Now(), false)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"Retail", "VIP"}, f.Partners[0].Categories)
 }

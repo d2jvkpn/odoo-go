@@ -31,6 +31,11 @@ func (f *fakeTarget) record(format string, args ...any) {
 	f.calls = append(f.calls, fmt.Sprintf(format, args...))
 }
 
+func (f *fakeTarget) CreateSyncUoM(_ context.Context, name string, relativeTo int, factor float64) (int, error) {
+	f.record("uom:%s:parent=%d:factor=%g", name, relativeTo, factor)
+	return 801, nil
+}
+
 func (f *fakeTarget) CreateProductCategory(_ context.Context, _ odoo.CategoryType, in odoo.CreateProductCategoryRequest) (int, error) {
 	if f.failCategory {
 		return 0, errors.New("boom")
@@ -351,7 +356,7 @@ func TestApplyCreatesVariantAndTemplateBOMsWithTargetIDs(t *testing.T) {
 func TestApplyCreatesBOMsOfProductsCreatedInTheSameRunAfterTheTemplates(t *testing.T) {
 	snap := emptySnapshot()
 	f := sampleFile()
-	f.Include = []string{"products", "boms"}
+	f.Section = "all"
 	f.BOMs = []FileBOM{fBOM(1, "A-1", "", fLine("273001101", 1))}
 	plan, problems := buildPlan(f, snap, importOptions{EmptyCode: emptyCodeReject, SaleOK: saleOKAll, BOMs: true})
 	require.Empty(t, problems)

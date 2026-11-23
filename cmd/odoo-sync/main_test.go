@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -53,13 +54,28 @@ func TestCheckCommandRejectsTheWrongSection(t *testing.T) {
 	require.NoError(t, writeCatalogFile(products, sampleFile()))
 	boms := filepath.Join(dir, "boms.json")
 	f := sampleFile()
-	f.Templates, f.BOMs, f.Include = nil, []FileBOM{sampleBOM()}, []string{"boms"}
+	f.Templates, f.BOMs, f.Section = nil, []FileBOM{sampleBOM()}, "boms"
 	require.NoError(t, writeCatalogFile(boms, f))
 
 	err := run(context.Background(), []string{"boms", "check", "-in", products}, &bytes.Buffer{})
 	assert.ErrorContains(t, err, "the file has no boms section")
 	err = run(context.Background(), []string{"products", "check", "-in", boms}, &bytes.Buffer{})
 	assert.ErrorContains(t, err, "the file has no products section")
+}
+
+func TestCatalogCommandsRejectFormatOneBeforeCheckingSection(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "old.json")
+	require.NoError(t, os.WriteFile(path, []byte(`{"format":1,"include":["products"],"templates":[]}`), 0o600))
+	for _, command := range []string{"check", "import"} {
+		var out bytes.Buffer
+		args := []string{"products", command, "-in", path}
+		if command == "import" {
+			args = append(args, "-target", "unused.yaml")
+		}
+		err := run(context.Background(), args, &out)
+		require.ErrorContains(t, err, "problems found")
+		assert.Contains(t, out.String(), "unsupported format 1: this tool reads format 2")
+	}
 }
 
 func TestGroupHelpPrintsUsage(t *testing.T) {

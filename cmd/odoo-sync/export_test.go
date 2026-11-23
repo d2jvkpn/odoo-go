@@ -14,6 +14,7 @@ type fakeSource struct {
 	variants []odoo.CatalogVariant
 	values   map[int]odoo.ProductAttributeValue
 	boms     []odoo.BOM
+	uoms     []odoo.SyncUoM
 	noBOMs   bool // ListBOMs must not be called
 }
 
@@ -26,6 +27,13 @@ func (f fakeSource) ListBOMs(context.Context, bool) ([]odoo.BOM, error) {
 
 func (f fakeSource) ListCatalogVariants(context.Context, bool) ([]odoo.CatalogVariant, error) {
 	return f.variants, nil
+}
+
+func (f fakeSource) ListSyncUoMs(context.Context) ([]odoo.SyncUoM, error) {
+	if f.uoms == nil {
+		return []odoo.SyncUoM{{ID: 1, Name: "kg", RelativeFactor: 1, Active: true}}, nil
+	}
+	return f.uoms, nil
 }
 
 func (f fakeSource) ProductAttributeValues(context.Context, []int) (map[int]odoo.ProductAttributeValue, error) {
@@ -59,7 +67,7 @@ func TestBuildExportGroupsVariantsByTemplateAndSortsEverything(t *testing.T) {
 
 	assert.Equal(t, formatVersion, f.Format)
 	assert.Equal(t, "2026-11-21T10:00:00Z", f.ExportedAt)
-	assert.Equal(t, []string{"products"}, f.Include)
+	assert.Equal(t, "products", f.Section)
 	assert.Equal(t, FileSource{Name: "src", BaseURL: "http://odoo.example"}, f.Source)
 	assert.Equal(t, []FileCategory{{Path: "蔬菜 / 番茄类"}}, f.Categories)
 	assert.Equal(t, []FileAttribute{{Name: "规格", Values: []string{"1.5kg", "1kg"}}}, f.Attributes)
@@ -142,7 +150,7 @@ func bomSource() fakeSource {
 func TestBuildExportWritesVariantAndTemplateBOMsSortedByID(t *testing.T) {
 	f, _, err := buildExport(context.Background(), bomSource(), "src", "http://odoo.example", time.Now(), "all")
 	require.NoError(t, err)
-	assert.Equal(t, []string{"products", "boms"}, f.Include)
+	assert.Equal(t, "all", f.Section)
 	require.Len(t, f.BOMs, 2)
 
 	v := f.BOMs[0]
@@ -203,7 +211,7 @@ func TestBuildExportFailsOnUnknownComponentVariant(t *testing.T) {
 func TestBuildExportIncludeSections(t *testing.T) {
 	f, _, err := buildExport(context.Background(), bomSource(), "src", "http://odoo.example", time.Now(), "boms")
 	require.NoError(t, err)
-	assert.Equal(t, []string{"boms"}, f.Include)
+	assert.Equal(t, "boms", f.Section)
 	assert.Empty(t, f.Templates)
 	assert.Empty(t, f.Categories)
 	assert.Empty(t, f.Attributes)
@@ -213,7 +221,7 @@ func TestBuildExportIncludeSections(t *testing.T) {
 	src.noBOMs = true
 	f, _, err = buildExport(context.Background(), src, "src", "http://odoo.example", time.Now(), "products")
 	require.NoError(t, err)
-	assert.Equal(t, []string{"products"}, f.Include)
+	assert.Equal(t, "products", f.Section)
 	assert.Empty(t, f.BOMs)
 	assert.NotEmpty(t, f.Templates)
 }

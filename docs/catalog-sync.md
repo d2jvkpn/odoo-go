@@ -11,11 +11,15 @@ in the source are archived in the target.
 go build -o target/odoo-sync ./cmd/odoo-sync
 target/odoo-sync products export -source configs/source.yaml -out data/products.json
 target/odoo-sync products check  -in data/products.json
+target/odoo-sync products check  -in data/products.json -target configs/target.yaml
 target/odoo-sync products import -target configs/target.yaml -in data/products.json -dry-run
 target/odoo-sync products import -target configs/target.yaml -in data/products.json -map-out data/map.csv
 target/odoo-sync boms export -source configs/source.yaml -out data/boms.json
+target/odoo-sync boms check  -in data/boms.json -target configs/target.yaml
 target/odoo-sync boms import -target configs/target.yaml -in data/boms.json -dry-run
 target/odoo-sync partners export -source configs/source.yaml -out data/partners.json
+target/odoo-sync partners export -source configs/source.yaml -out data/partners.json --infer-country-from-state
+target/odoo-sync partners check  -in data/partners.json -target configs/target.yaml
 target/odoo-sync partners import -target configs/target.yaml -in data/partners.json -dry-run
 ```
 
@@ -24,15 +28,34 @@ Connection files are read by `odoo.LoadClient` (`odoo.base_url`, `odoo.api_key`,
 `is_storable`. BOMs also need the Manufacturing module (`mrp`); on a database without it, use only
 the `products` and `partners` groups. Partners need only `base`.
 
+`check -in` validates the file and the default import policy: it reports uncoded product variants,
+BOM products or components without a code, and top-level partners without a match key. Use
+`-empty-code skip`, `-empty-key skip` or `-sale-ok only` to check with the matching import policy.
+Add `-target` for a read-only import preflight against the target database, including matching,
+missing dependencies and unit conversions. `-no-create-deps` requires `-target`. A passing preflight
+does not guarantee that later writes will succeed; Odoo can reject a write or change between check
+and import.
+
+Product and BOM exports include each unit of measure they use, plus its reference units, in the
+`units` section. Odoo 19 represents conversions with `relative_uom_id` and `relative_factor`; the
+file stores the reference unit by name. Import creates missing units before products or BOMs. An
+existing unit with the same name must have the same reference and factor, or the import stops before
+writing. Catalog files now use format 2 with a single `section` value (`products` or `boms` from
+the CLI; `all` is accepted for combined files). Format 1 files with an `include` array are rejected
+and must be exported again. Partner files keep their separate format 1 schema.
+
 ## Matching
 
 Variants are matched between databases by `default_code` (the "Internal Reference") only. Odoo ids
 differ per database, so the file keeps each source id as `source_id` for reference and the importer
 ignores it. A template is matched through its variants. Categories match by full path, attributes by
-name, attribute values by attribute and name, and units of measure by name. Units are never created.
+name, attribute values by attribute and name, and units of measure by name. Missing units are
+created from the file's `units` definitions.
 
 The export leaves out archived variants that have no `default_code` and prints how many: they cannot
 be matched, and they usually repeat the value combination of the variant that replaced them.
+Active variants without `default_code` stay in the file; export warns how many were included, since
+the default `-empty-code reject` import policy will refuse them.
 
 ## Import options
 
@@ -42,7 +65,7 @@ be matched, and they usually repeat the value combination of the variant that re
   covers a product or a component without a code: `skip` skips that BOM and archives no BOM of its
   product, since the target copy of a skipped BOM cannot be judged.
 - `-sale-ok all` (default) imports every template; `only` imports templates with `sale_ok` set.
-- `-no-create-deps` fails instead of creating missing categories, attributes and values.
+- `-no-create-deps` fails instead of creating missing units, categories, attributes and values.
 - `-map-out file.csv` writes a CSV with the columns default_code, source_variant_id,
   target_variant_id and target_template_id. Use it to translate ids that another system stored from
   the source. Only `products import` has it; `boms import` rejects it.
@@ -129,6 +152,12 @@ when a partner has no name (typical for an unnamed invoice or delivery address);
 the source first. The commands are `export`, `check` and `import`, and `import` takes `-dry-run`,
 `-empty-key reject|skip` and `-no-create-deps`. Partners need only the `base` module.
 
+With `partners export --infer-country-from-state`, a partner whose country is empty but whose state
+has a country in the source Odoo gets that country and state in the export file. The exporter prints
+a warning naming the inferred country. Without the flag, it warns and omits the state; the partner
+is still exported. If a nonempty partner country conflicts with the state's country, the state is
+omitted under either policy. The source database is never changed.
+
 Top-level partners are matched in the target in priority passes over the whole file. All partners
 with a `ref` are matched first; the remaining ones are then matched by `vat` among the target
 partners not already claimed, and then by `email` (case-insensitive), skipping a key that is empty
@@ -153,8 +182,7 @@ The import stops, before any write, when a partner's `lang` is not installed in 
 is matched by name and state by country and name; a missing one stops the import and is listed, and
 neither is created. Tags are matched by name and missing ones are created (with `-no-create-deps`
 they stop the import); parent tags are not recreated. The salesperson, company, industry and the
-create and modify dates are not exported. A state that belongs to a different country than the
-partner is left out of the file with a warning.
+create and modify dates are not exported.
 
 The importer plans the whole import before writing and stops on any problem: a duplicate key in the
 file, a missing parent, a missing country, state or (with `-no-create-deps`) tag, an ambiguous

@@ -63,6 +63,40 @@ func TestPartnersExportCheckAndDryRunImportWriteNothing(t *testing.T) {
 	assert.Empty(t, writes)
 }
 
+func TestPartnersExportCanInferCountryFromOdooState(t *testing.T) {
+	routes := partnerSourceRoutes()
+	routes["/json/2/res.partner/search_read"] = `[{"id":18,"name":"杭州门店","ref":"HZ-18",` +
+		`"type":"contact","active":true,"parent_id":false,"country_id":false,"state_id":[31,"浙江省"],` +
+		`"category_id":[]}]`
+	routes["/json/2/res.country.state/search_read"] = `[{"id":31,"name":"浙江省","code":"浙",` +
+		`"country_id":[48,"China"]}]`
+	var writes []string
+	source := fakeOdoo(t, routes, &writes)
+	config := writeConnection(t, "src.yaml", source)
+	path := filepath.Join(t.TempDir(), "partners.json")
+	var out bytes.Buffer
+	require.NoError(t, run(context.Background(), []string{
+		"partners", "export", "--source", config, "--out", path, "--infer-country-from-state",
+	}, &out))
+	f, err := readPartnersFile(path)
+	require.NoError(t, err)
+	require.Len(t, f.Partners, 1)
+	assert.Equal(t, "China", f.Partners[0].Country)
+	assert.Equal(t, "浙江省", f.Partners[0].State)
+	assert.Contains(t, out.String(), `inferred country "China" from state "浙江省"`)
+	assert.Empty(t, writes)
+
+	out.Reset()
+	require.NoError(t, run(context.Background(), []string{
+		"partners", "export", "--source", config, "--out", path,
+	}, &out))
+	f, err = readPartnersFile(path)
+	require.NoError(t, err)
+	assert.Empty(t, f.Partners[0].Country)
+	assert.Empty(t, f.Partners[0].State)
+	assert.Contains(t, out.String(), "is not exported")
+}
+
 func TestPartnersImportCreatesPartners(t *testing.T) {
 	file := exportPartnersFile(t)
 	var writes []string

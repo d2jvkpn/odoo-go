@@ -12,7 +12,6 @@ import (
 type snapshotAPI interface {
 	catalogSource
 	ListProductAttributes(ctx context.Context) ([]odoo.ProductAttribute, error)
-	ListUoMs(ctx context.Context) ([]odoo.UoM, error)
 	AllProductCategories(ctx context.Context, query odoo.ProductCategoryQuery) iter.Seq2[odoo.ProductCategory, error]
 }
 
@@ -28,12 +27,14 @@ type SnapAttribute struct {
 
 // Snapshot is everything the planner needs to know about the target, as plain data.
 type Snapshot struct {
-	Categories map[string]int                     // full path -> product.category ID
-	Attributes map[string]SnapAttribute           // attribute name -> attribute
-	UoMs       map[string]int                     // unit name -> uom.uom ID
-	Variants   []odoo.CatalogVariant              // active and archived
-	Values     map[int]odoo.ProductAttributeValue // template attribute value ID -> value, for Variants
-	BOMs       []odoo.BOM                         // active and archived, with lines; nil unless requested
+	Categories    map[string]int                     // full path -> product.category ID
+	Attributes    map[string]SnapAttribute           // attribute name -> attribute
+	UoMs          map[string]int                     // unit name -> uom.uom ID
+	UnitDetails   map[string]odoo.SyncUoM            // unit name -> conversion definition
+	DuplicateUoMs map[string]bool                    // names that identify multiple target units
+	Variants      []odoo.CatalogVariant              // active and archived
+	Values        map[int]odoo.ProductAttributeValue // template attribute value ID -> value, for Variants
+	BOMs          []odoo.BOM                         // active and archived, with lines; nil unless requested
 }
 
 // loadSnapshot reads the target. It only reads. BOMs are read only when withBOMs is set, so a
@@ -41,12 +42,14 @@ type Snapshot struct {
 func loadSnapshot(ctx context.Context, api snapshotAPI, withBOMs bool) (*Snapshot, error) {
 	var (
 		snap = &Snapshot{
-			Categories: make(map[string]int),
-			Attributes: make(map[string]SnapAttribute),
-			UoMs:       make(map[string]int),
+			Categories:    make(map[string]int),
+			Attributes:    make(map[string]SnapAttribute),
+			UoMs:          make(map[string]int),
+			UnitDetails:   make(map[string]odoo.SyncUoM),
+			DuplicateUoMs: make(map[string]bool),
 		}
 		attrs []odoo.ProductAttribute
-		uoms  []odoo.UoM
+		uoms  []odoo.SyncUoM
 		ids   []int
 		cat   odoo.ProductCategory
 		err   error
@@ -75,11 +78,17 @@ func loadSnapshot(ctx context.Context, api snapshotAPI, withBOMs bool) (*Snapsho
 		}
 		snap.Attributes[a.Name] = sa
 	}
-	if uoms, err = api.ListUoMs(ctx); err != nil {
+	if uoms, err = api.ListSyncUoMs(ctx); err != nil {
 		return nil, fmt.Errorf("read target units of measure: %w", err)
 	}
 	for _, u := range uoms {
-		snap.UoMs[u.Name] = u.ID
+		if _, found := snap.UnitDetails[u.Name]; found {
+			snap.DuplicateUoMs[u.Name] = true
+		}
+		snap.UnitDetails[u.Name] = u
+		if u.Active {
+			snap.UoMs[u.Name] = u.ID
+		}
 	}
 	if snap.Variants, err = api.ListCatalogVariants(ctx, true); err != nil {
 		return nil, fmt.Errorf("read target variants: %w", err)

@@ -13,7 +13,7 @@ import (
 type fakeSnapshotAPI struct {
 	fakeSource
 	attrs []odoo.ProductAttribute
-	uoms  []odoo.UoM
+	uoms  []odoo.SyncUoM
 	cats  []odoo.ProductCategory
 }
 
@@ -21,7 +21,7 @@ func (f fakeSnapshotAPI) ListProductAttributes(context.Context) ([]odoo.ProductA
 	return f.attrs, nil
 }
 
-func (f fakeSnapshotAPI) ListUoMs(context.Context) ([]odoo.UoM, error) { return f.uoms, nil }
+func (f fakeSnapshotAPI) ListSyncUoMs(context.Context) ([]odoo.SyncUoM, error) { return f.uoms, nil }
 
 func (f fakeSnapshotAPI) AllProductCategories(
 	_ context.Context, _ odoo.ProductCategoryQuery,
@@ -44,7 +44,7 @@ func TestLoadSnapshotIndexesTheTarget(t *testing.T) {
 		attrs: []odoo.ProductAttribute{{ID: 3, Name: "规格", CreateVariant: "always", Active: true, Values: []odoo.ProductAttributeOption{
 			{ID: 10, Name: "1kg", Active: true}, {ID: 12, Name: "500g"},
 		}}},
-		uoms: []odoo.UoM{{ID: 1, Name: "kg"}},
+		uoms: []odoo.SyncUoM{{ID: 1, Name: "kg", RelativeFactor: 1, Active: true}},
 		cats: []odoo.ProductCategory{{ID: 7, Name: "番茄类", CompleteName: "蔬菜 / 番茄类"}},
 	}
 	snap, err := loadSnapshot(context.Background(), api, false)

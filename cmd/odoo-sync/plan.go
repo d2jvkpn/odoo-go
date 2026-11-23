@@ -88,6 +88,7 @@ func (t TemplatePlan) Changes() bool {
 
 // Plan is everything an import would do, computed without writing.
 type Plan struct {
+	NewUoMs       []FileUoM
 	NewCategories []string            // full paths, parents before children
 	NewAttributes []string            // attribute names
 	NewValues     map[string][]string // attribute name -> value names to create
@@ -134,6 +135,8 @@ func buildPlan(f *CatalogFile, snap *Snapshot, opt importOptions) (*Plan, []stri
 		newAttrs = make(map[string]bool)
 		newVals  = make(map[string]map[string]bool)
 	)
+	plan.NewUoMs, problems = planUnits(f, snap, opt)
+	snap = plannedUnits(snap, plan.NewUoMs)
 
 	for _, v := range snap.Variants {
 		if v.DefaultCode != "" {
@@ -424,6 +427,9 @@ func templateDiffs(t FileTemplate, tv odoo.CatalogVariant) []Diff {
 func printPlan(w io.Writer, p *Plan) {
 	var creates, updates, same int
 
+	for _, u := range p.NewUoMs {
+		fmt.Fprintf(w, "create unit %q relative to %q (factor %s)\n", u.Name, u.RelativeTo, formatNumber(u.RelativeFactor))
+	}
 	for _, c := range p.NewCategories {
 		fmt.Fprintf(w, "create category %q\n", c)
 	}

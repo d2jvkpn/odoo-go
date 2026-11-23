@@ -25,7 +25,8 @@
   another, through the `products`, `boms` and `partners` command groups. Products and BOMs match
   variants by `default_code`; partners match by `ref`, `vat` and `email`. It uses
   `ListCatalogVariants`, `ListSyncPartners`, `ListActiveLanguages`, `ListStatesByIDs`,
-  `CreatePartnerTag`, `ListProductAttributes`, `ListUoMs`, `CreateProductTemplate`,
+  `CreatePartnerTag`, `ListProductAttributes`, `ListUoMs`, `ListSyncUoMs`, `CreateSyncUoM`,
+  `CreateProductTemplate`,
   `UpdateProductTemplate`, `SetProductTemplateActive`, `UpdateVariantFields`, `ListBOMs`,
   `CreateBOM`, `SetBOMActive` and `UpdateBOMCode` from the root package. See [catalog-sync.md](catalog-sync.md).
 - `UpsertPartnerByRef` is not safe under concurrent calls for the same ref; the SDK deliberately

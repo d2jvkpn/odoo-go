@@ -26,7 +26,7 @@ func runPartners(ctx context.Context, args []string, out io.Writer) error {
 	case "export":
 		return runPartnersExport(ctx, args[1:], out)
 	case "check":
-		return runPartnersCheck(args[1:], out)
+		return runPartnersCheck(ctx, args[1:], out)
 	case "import":
 		return runPartnersImport(ctx, args[1:], out)
 	default:
@@ -36,13 +36,14 @@ func runPartners(ctx context.Context, args []string, out io.Writer) error {
 
 func runPartnersExport(ctx context.Context, args []string, out io.Writer) error {
 	var (
-		flags    = flag.NewFlagSet("odoo-sync partners export", flag.ContinueOnError)
-		source   = flags.String("source", "", "connection file of the source Odoo")
-		dest     = flags.String("out", "", "partners file to write")
-		client   *odoo.Client
-		f        *PartnersFile
-		warnings []string
-		err      error
+		flags        = flag.NewFlagSet("odoo-sync partners export", flag.ContinueOnError)
+		source       = flags.String("source", "", "connection file of the source Odoo")
+		dest         = flags.String("out", "", "partners file to write")
+		inferCountry = flags.Bool("infer-country-from-state", false, "fill a missing country from the state record")
+		client       *odoo.Client
+		f            *PartnersFile
+		warnings     []string
+		err          error
 	)
 
 	flags.SetOutput(out)
@@ -59,7 +60,7 @@ func runPartnersExport(ctx context.Context, args []string, out io.Writer) error 
 		return err
 	}
 	name := strings.TrimSuffix(filepath.Base(*source), filepath.Ext(*source))
-	if f, warnings, err = buildPartnerExport(ctx, client, name, client.BaseURL, time.Now()); err != nil {
+	if f, warnings, err = buildPartnerExport(ctx, client, name, client.BaseURL, time.Now(), *inferCountry); err != nil {
 		return err
 	}
 	if err = writePartnersFile(*dest, f); err != nil {
@@ -72,12 +73,18 @@ func runPartnersExport(ctx context.Context, args []string, out io.Writer) error 
 	return nil
 }
 
-func runPartnersCheck(args []string, out io.Writer) error {
+func runPartnersCheck(ctx context.Context, args []string, out io.Writer) error {
 	var (
-		flags = flag.NewFlagSet("odoo-sync partners check", flag.ContinueOnError)
-		in    = flags.String("in", "", "partners file")
-		f     *PartnersFile
-		err   error
+		flags        = flag.NewFlagSet("odoo-sync partners check", flag.ContinueOnError)
+		in           = flags.String("in", "", "partners file")
+		target       = flags.String("target", "", "optional target connection file for import preflight")
+		emptyKey     = flags.String("empty-key", emptyKeyReject, "top-level partners without a key: reject or skip")
+		noCreateDeps = flags.Bool("no-create-deps", false, "fail if a target tag is missing; requires -target")
+		f            *PartnersFile
+		client       *odoo.Client
+		snap         *PartnerSnapshot
+		problems     []string
+		err          error
 	)
 
 	flags.SetOutput(out)
@@ -90,16 +97,39 @@ func runPartnersCheck(args []string, out io.Writer) error {
 	if *in == "" {
 		return errors.New("-in is required")
 	}
+	if *emptyKey != emptyKeyReject && *emptyKey != emptyKeySkip {
+		return fmt.Errorf("-empty-key must be reject or skip, got %q", *emptyKey)
+	}
+	if *noCreateDeps && *target == "" {
+		return errors.New("-no-create-deps requires -target")
+	}
 	if f, err = readPartnersFile(*in); err != nil {
 		return err
 	}
-	if problems := f.Validate(); len(problems) > 0 {
-		for _, p := range problems {
-			fmt.Fprintln(out, "-", p)
-		}
-		return fmt.Errorf("%d problems found", len(problems))
+	if problems = f.Validate(); len(problems) > 0 {
+		return reportProblems(out, problems)
 	}
-	fmt.Fprintf(out, "ok: %d partners\n", len(f.Partners))
+	if problems = partnerPolicyProblems(f, *emptyKey); len(problems) > 0 {
+		return reportProblems(out, problems)
+	}
+	if *target != "" {
+		if client, err = odoo.LoadClient(*target); err != nil {
+			return err
+		}
+		if snap, err = loadPartnerSnapshot(ctx, client, f); err != nil {
+			return err
+		}
+		if _, problems = buildPartnerPlan(f, snap, partnerOptions{
+			EmptyKey: *emptyKey, NoCreateDeps: *noCreateDeps,
+		}); len(problems) > 0 {
+			return reportProblems(out, problems)
+		}
+	}
+	if *target == "" {
+		fmt.Fprintf(out, "ok: %d partners (file checks only; use -target for import preflight)\n", len(f.Partners))
+	} else {
+		fmt.Fprintf(out, "ok: %d partners (target preflight passed; nothing was written)\n", len(f.Partners))
+	}
 	return nil
 }
 

@@ -35,7 +35,7 @@ func fBOM(id int, productCode, code string, lines ...FileBOMLine) FileBOM {
 }
 
 func bomFile(boms ...FileBOM) *CatalogFile {
-	return &CatalogFile{Format: formatVersion, Include: []string{"boms"}, BOMs: boms}
+	return &CatalogFile{Format: formatVersion, Section: "boms", BOMs: boms}
 }
 
 // bomSnapshot has products P-1 (variant 1, template 5001) and P-2, components C-1 (10) and C-2 (11).
@@ -196,7 +196,7 @@ func TestBOMPlanSkipsUncodedBOMsWhenAsked(t *testing.T) {
 
 func TestBOMPlanResolvesProductsCreatedInTheSameRun(t *testing.T) {
 	f := sampleFile()
-	f.Include = []string{"products", "boms"}
+	f.Section = "all"
 	f.BOMs = []FileBOM{fBOM(1, "A-1", "", fLine("273001101", 1))}
 
 	plan, problems := buildPlan(f, emptySnapshot(), importOptions{EmptyCode: emptyCodeReject, SaleOK: saleOKAll, BOMs: true})
@@ -260,7 +260,7 @@ func TestBOMPlanRejectsDuplicateTargetCodes(t *testing.T) {
 func TestBOMPlanSkipsBOMsOfProductsSkippedOnTheProductsSide(t *testing.T) {
 	f := sampleFile()
 	f.Templates[1].SaleOK = false // 273001101 is skipped by -sale-ok only
-	f.Include = []string{"products", "boms"}
+	f.Section = "all"
 	f.BOMs = []FileBOM{fBOM(1, "A-1", "", fLine("273001101", 1)), fBOM(2, "A-2", "", fLine("A-1", 1))}
 
 	plan, problems := buildPlan(f, emptySnapshot(), importOptions{EmptyCode: emptyCodeReject, SaleOK: saleOKOnly, BOMs: true})
