@@ -14,6 +14,7 @@ copying products, BOMs and partners between databases.
 .
 ├── AGENTS.md             — coding-agent instructions: repo layout, commands, and doc `@`-includes
 ├── README.md             — usage: CLI examples, the Go API, errors, retries
+├── Makefile              — help and build targets; binaries go to target/
 ├── go.mod                — Go module definition (`github.com/d2jvkpn/odoo-go`)
 ├── *.go                  — package `odoo`: client, config and every API call; tests beside them as `*_test.go`
 ├── cmd/                  — `main` entry points; arguments and output only, reusable behavior in package `odoo`
@@ -43,7 +44,9 @@ Prerequisites: Go 1.27. The tests use `httptest` fakes and need no Odoo or crede
 checks in `docs/manual-testing.md` need a live server. Run commands from the repository root:
 
 ```sh
-go build -o target/odoo ./cmd/odoo-cli          # build the CLI
+make help                                        # list Makefile targets
+make build                                       # build both CLIs into target/
+go build -o target/odoo-cli ./cmd/odoo-cli      # build the CLI
 go build -o target/odoo-sync ./cmd/odoo-sync    # build the sync tool
 go test -count=1 ./...                          # run every test, uncached
 go test -run TestName ./cmd/odoo-sync           # run one test in one package

@@ -24,11 +24,13 @@ go run ./cmd/odoo-cli -config configs/local.yaml products list -limit 10
 Run from the repository root. Build output goes to `target/`, which Git ignores:
 
 ```sh
-go build -o target/odoo ./cmd/odoo-cli
-./target/odoo -h
+make help
+make build
+./target/odoo-cli -h
 ```
 
-If the workspace has no valid Git metadata, add `-buildvcs=false` to the build command.
+`make build` creates both `target/odoo-cli` and `target/odoo-sync`. If the workspace has no valid Git
+metadata, run the `go build` commands in `Makefile` with `-buildvcs=false`.
 
 ## Querying products
 
