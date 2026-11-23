@@ -36,6 +36,15 @@ missing dependencies and unit conversions. `-no-create-deps` requires `-target`.
 does not guarantee that later writes will succeed; Odoo can reject a write or change between check
 and import.
 
+`partners check` prints the total, top-level and child counts, then exact-name counts for top-level
+partners and each child type. Each name line shows records, unique names, names used more than once,
+and extra records sharing a name. Counts include every record in the file, even when
+`-empty-key skip` is used. These statistics also appear when a valid file fails the import policy or
+target preflight; the command still exits with a failure in that case.
+For each parent group, `partners check` also prints how many records have direct children and the
+number of children of each Odoo partner type. `top_level` is the group of records without a parent;
+the other groups contain child records of the named type.
+
 Product and BOM exports include each unit of measure they use, plus its reference units, in the
 `units` section. Odoo 19 represents conversions with `relative_uom_id` and `relative_factor`; the
 file stores the reference unit by name. Import creates missing units before products or BOMs. An

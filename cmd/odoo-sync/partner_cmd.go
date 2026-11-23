@@ -109,6 +109,8 @@ func runPartnersCheck(ctx context.Context, args []string, out io.Writer) error {
 	if problems = f.Validate(); len(problems) > 0 {
 		return reportProblems(out, problems)
 	}
+	printPartnerStats(out, f)
+	fmt.Fprintln(out, "\nWarnings")
 	if problems = partnerPolicyProblems(f, *emptyKey); len(problems) > 0 {
 		return reportProblems(out, problems)
 	}

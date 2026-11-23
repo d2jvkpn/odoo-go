@@ -61,6 +61,46 @@ func TestPartnersCheckReportsMissingMatchKey(t *testing.T) {
 	}, &out))
 }
 
+func TestPartnersCheckPrintsNameStatsBeforePolicyProblems(t *testing.T) {
+	f := &PartnersFile{Format: partnersFormat, Partners: []FilePartner{
+		{SourceID: 1, Name: "Customer", Ref: "C1", Type: "contact"},
+		{SourceID: 2, Name: "Customer", Type: "contact"},
+		{SourceID: 3, ParentSourceID: 1, Name: "Shop A", Type: "delivery"},
+		{SourceID: 4, ParentSourceID: 1, Name: "Shop B", Type: "delivery"},
+		{SourceID: 5, ParentSourceID: 3, Name: "Store contact", Type: "contact"},
+		{SourceID: 6, ParentSourceID: 4, Name: "Store contact", Type: "contact"},
+	}}
+	path := filepath.Join(t.TempDir(), "partners.json")
+	require.NoError(t, writePartnersFile(path, f))
+	var out bytes.Buffer
+	err := run(context.Background(), []string{"partners", "check", "-in", path}, &out)
+	require.ErrorContains(t, err, "nothing was written")
+	assert.Contains(t, out.String(), "ParentType  Records  WithChildren  Stats")
+	assert.Contains(t, out.String(), "top_level    2        1              names_unique=1, duplicate_names=1, duplicate_records=1, child_delivery=2")
+	assert.Contains(t, out.String(), "delivery     2        2              names_unique=2, child_contact=2")
+	assert.Contains(t, out.String(), "contact      2        0              names_unique=1, duplicate_names=1, duplicate_records=1")
+	assert.Contains(t, out.String(), "\nWarnings\n")
+	assert.Contains(t, out.String(), "no ref, vat or email")
+}
+
+func TestPartnersCheckPrintsDirectChildrenByParentKind(t *testing.T) {
+	f := &PartnersFile{Format: partnersFormat, Partners: []FilePartner{
+		{SourceID: 1, Name: "Customer", Ref: "C1", Type: "contact"},
+		{SourceID: 2, ParentSourceID: 1, Name: "Shop", Type: "delivery"},
+		{SourceID: 3, ParentSourceID: 2, Name: "Shop contact", Type: "contact"},
+		{SourceID: 4, ParentSourceID: 3, Name: "Billing", Type: "invoice"},
+		{SourceID: 5, ParentSourceID: 1, Name: "Head office contact", Type: "contact"},
+	}}
+	path := filepath.Join(t.TempDir(), "partners.json")
+	require.NoError(t, writePartnersFile(path, f))
+	var out bytes.Buffer
+	require.NoError(t, run(context.Background(), []string{"partners", "check", "-in", path}, &out))
+	assert.Contains(t, out.String(), "top_level  1        1              names_unique=1, child_delivery=1, child_contact=1")
+	assert.Contains(t, out.String(), "delivery   1        1              names_unique=1, child_contact=1")
+	assert.Contains(t, out.String(), "contact    2        1              names_unique=2, child_invoice=1")
+	assert.Contains(t, out.String(), "invoice    1        0              names_unique=1")
+}
+
 func TestProductsCheckWithTargetReportsMissingUnitWithoutWrites(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "products.json")
 	require.NoError(t, writeCatalogFile(path, sampleFile()))
