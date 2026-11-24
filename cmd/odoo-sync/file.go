@@ -28,8 +28,8 @@ type CatalogFile struct {
 
 // FileSource says where the file came from; it is informational.
 type FileSource struct {
-	Name    string `json:"name"`
-	BaseURL string `json:"base_url"`
+	Filename string `json:"filename"`
+	BaseURL  string `json:"base_url"`
 }
 
 // FileUoM describes an Odoo 19 unit. RelativeTo names its reference unit;

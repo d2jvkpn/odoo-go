@@ -25,7 +25,7 @@ type partnerSource interface {
 func buildPartnerExport(
 	ctx context.Context,
 	src partnerSource,
-	name, baseURL string,
+	filename, baseURL string,
 	now time.Time,
 	inferCountryFromState bool,
 ) (*PartnersFile, []string, error) {
@@ -67,7 +67,7 @@ func buildPartnerExport(
 	sort.Slice(partners, func(i, j int) bool { return partners[i].ID < partners[j].ID })
 	out = &PartnersFile{
 		Format: partnersFormat, ExportedAt: now.UTC().Format(time.RFC3339),
-		Source: FileSource{Name: name, BaseURL: baseURL},
+		Source: FileSource{Filename: filename, BaseURL: baseURL},
 	}
 	for _, p := range partners {
 		if strings.TrimSpace(p.Name) == "" {

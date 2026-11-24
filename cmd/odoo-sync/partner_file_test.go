@@ -11,7 +11,7 @@ import (
 func samplePartners() *PartnersFile {
 	return &PartnersFile{
 		Format: partnersFormat, ExportedAt: "2026-11-22T00:00:00Z",
-		Source: FileSource{Name: "src", BaseURL: "http://src"},
+		Source: FileSource{Filename: "src", BaseURL: "http://src"},
 		Partners: []FilePartner{
 			{SourceID: 10, Ref: "user-42", Name: "Alice Co.", IsCompany: true, Type: "contact", Active: true,
 				Email: "a@x.com", Country: "Norway", State: "Oslo", Categories: []string{"VIP"}},

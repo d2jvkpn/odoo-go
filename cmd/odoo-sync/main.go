@@ -9,8 +9,6 @@ import (
 	"io"
 	"os"
 	"os/signal"
-	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/d2jvkpn/odoo-go"
@@ -197,8 +195,7 @@ func runExport(ctx context.Context, section string, args []string, out io.Writer
 	if client, err = odoo.LoadClient(*source); err != nil {
 		return err
 	}
-	name := strings.TrimSuffix(filepath.Base(*source), filepath.Ext(*source))
-	if f, omitted, err = buildExport(ctx, client, name, client.BaseURL, time.Now(), section); err != nil {
+	if f, omitted, err = buildExport(ctx, client, *source, client.BaseURL, time.Now(), section); err != nil {
 		return err
 	}
 	if err = writeCatalogFile(*dest, f); err != nil {

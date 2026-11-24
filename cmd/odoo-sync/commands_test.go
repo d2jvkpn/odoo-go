@@ -77,8 +77,13 @@ func TestExportThenDryRunImportCreatesNothing(t *testing.T) {
 
 	catalog := filepath.Join(t.TempDir(), "catalog.json")
 	var out bytes.Buffer
-	require.NoError(t, run(context.Background(), []string{"products", "export", "-source", writeConnection(t, "src.yaml", source), "-out", catalog}, &out))
+	config := writeConnection(t, "src.yaml", source)
+	require.NoError(t, run(context.Background(), []string{"products", "export", "-source", config, "-out", catalog}, &out))
 	assert.Contains(t, out.String(), "exported 2 templates, 3 variants")
+	data, err := os.ReadFile(catalog)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), fmt.Sprintf(`"filename": %q`, config))
+	assert.NotContains(t, string(data), `"name": "src"`)
 
 	out.Reset()
 	require.NoError(t, run(context.Background(), []string{"products", "check", "-in", catalog}, &out))

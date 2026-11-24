@@ -26,7 +26,7 @@ type catalogSource interface {
 func buildExport(
 	ctx context.Context,
 	src catalogSource,
-	name, baseURL string,
+	filename, baseURL string,
 	now time.Time,
 	section string,
 ) (*CatalogFile, int, error) {
@@ -39,7 +39,7 @@ func buildExport(
 
 	out = &CatalogFile{
 		Format: formatVersion, ExportedAt: now.UTC().Format(time.RFC3339),
-		Section: section, Source: FileSource{Name: name, BaseURL: baseURL},
+		Section: section, Source: FileSource{Filename: filename, BaseURL: baseURL},
 	}
 	if variants, err = src.ListCatalogVariants(ctx, true); err != nil {
 		return nil, 0, fmt.Errorf("read source variants: %w", err)

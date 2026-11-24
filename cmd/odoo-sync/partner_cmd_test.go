@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -41,8 +42,13 @@ func exportPartnersFile(t *testing.T) string {
 	source := fakeOdoo(t, partnerSourceRoutes(), &[]string{})
 	file := filepath.Join(t.TempDir(), "partners.json")
 	var out bytes.Buffer
-	require.NoError(t, run(context.Background(), []string{"partners", "export", "-source", writeConnection(t, "src.yaml", source), "-out", file}, &out))
+	config := writeConnection(t, "src.yaml", source)
+	require.NoError(t, run(context.Background(), []string{"partners", "export", "-source", config, "-out", file}, &out))
 	assert.Contains(t, out.String(), "exported 2 partners")
+	data, err := os.ReadFile(file)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), fmt.Sprintf(`"filename": %q`, config))
+	assert.NotContains(t, string(data), `"name": "src"`)
 	return file
 }
 

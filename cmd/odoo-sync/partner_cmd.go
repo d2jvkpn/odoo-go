@@ -6,8 +6,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/d2jvkpn/odoo-go"
@@ -59,8 +57,7 @@ func runPartnersExport(ctx context.Context, args []string, out io.Writer) error 
 	if client, err = odoo.LoadClient(*source); err != nil {
 		return err
 	}
-	name := strings.TrimSuffix(filepath.Base(*source), filepath.Ext(*source))
-	if f, warnings, err = buildPartnerExport(ctx, client, name, client.BaseURL, time.Now(), *inferCountry); err != nil {
+	if f, warnings, err = buildPartnerExport(ctx, client, *source, client.BaseURL, time.Now(), *inferCountry); err != nil {
 		return err
 	}
 	if err = writePartnersFile(*dest, f); err != nil {

@@ -68,7 +68,7 @@ func TestBuildExportGroupsVariantsByTemplateAndSortsEverything(t *testing.T) {
 	assert.Equal(t, formatVersion, f.Format)
 	assert.Equal(t, "2026-11-21T10:00:00Z", f.ExportedAt)
 	assert.Equal(t, "products", f.Section)
-	assert.Equal(t, FileSource{Name: "src", BaseURL: "http://odoo.example"}, f.Source)
+	assert.Equal(t, FileSource{Filename: "src", BaseURL: "http://odoo.example"}, f.Source)
 	assert.Equal(t, []FileCategory{{Path: "蔬菜 / 番茄类"}}, f.Categories)
 	assert.Equal(t, []FileAttribute{{Name: "规格", Values: []string{"1.5kg", "1kg"}}}, f.Attributes)
 

@@ -28,6 +28,9 @@ Connection files are read by `odoo.LoadClient` (`odoo.base_url`, `odoo.api_key`,
 `is_storable`. BOMs also need the Manufacturing module (`mrp`); on a database without it, use only
 the `products` and `partners` groups. Partners need only `base`.
 
+Every export records the `-source` argument unchanged as `source.filename` in the JSON file.
+`source.base_url` records the configured Odoo URL. These fields are informational.
+
 `check -in` validates the file and the default import policy: it reports uncoded product variants,
 BOM products or components without a code, and top-level partners without a match key. Use
 `-empty-code skip`, `-empty-key skip` or `-sale-ok only` to check with the matching import policy.

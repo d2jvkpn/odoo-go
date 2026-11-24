@@ -12,7 +12,7 @@ import (
 func sampleFile() *CatalogFile {
 	return &CatalogFile{
 		Format: formatVersion, ExportedAt: "2026-11-21T10:00:00Z", Section: "products",
-		Source:     FileSource{Name: "src", BaseURL: "http://odoo.example"},
+		Source:     FileSource{Filename: "src", BaseURL: "http://odoo.example"},
 		Categories: []FileCategory{{Path: "蔬菜 / 番茄类"}},
 		Attributes: []FileAttribute{{Name: "规格", Values: []string{"1kg", "1.5kg"}}},
 		Templates: []FileTemplate{
