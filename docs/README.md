@@ -11,8 +11,10 @@
   `UpsertPartnerByRef`, `ConfirmSaleOrder`/`CancelSaleOrder`, and the variant helpers in
   `variants.go` (`AddProductVariants` and the attribute, value and line creators), and the
   read-only `OrderPickings`/`OrderInvoices`/`OrderPayments` in `fulfillment.go`, plus
-  `ValidatePicking` in `picking.go`. Writes share the helpers in `write.go`; there is no exported
-  generic write or delete, and only products and partners can be archived.
+  `ValidatePicking` in `picking.go`. `pricelists.go` reads price lists, rules and partner assignments,
+  and creates price lists and fixed-price product or variant rules. Record updates share helpers in
+  `write.go`; there is no exported generic write or delete, and only products and partners can be
+  archived.
 - `oca/helpdesk` wraps `*odoo.Client` with OCA core ticket lifecycle, metadata, attachment,
   message, follower and activity operations. Its typed delete methods are explicit and never
   retried. The `helpdesk` CLI exposes these operations. Core ticket reads work without the

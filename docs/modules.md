@@ -41,6 +41,7 @@ only lists, creates and updates them: it has no call that assigns a product to o
 |---------|--------|---------|
 | Product read | `product.product` | `product`, `stock` (the base field list always requests `is_storable`) |
 | Product create and update | `product.template` | `product`; `stock` only when `is_storable` is set |
+| Pricelists and rules | `product.pricelist`, `product.pricelist.item` | `product` |
 | Variants (`variants.go`) | `product.attribute`, `product.attribute.value`, `product.template.attribute.line`, `product.template.attribute.value` | `product` |
 | Bills of materials (`bom.go`) | `mrp.bom`, `mrp.bom.line` | `mrp` |
 | Internal categories | `product.category` | `product` |

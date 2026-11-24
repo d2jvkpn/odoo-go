@@ -105,6 +105,14 @@ func (c *Client) AllSaleOrders(ctx context.Context, query SaleOrderQuery) iter.S
 	})
 }
 
+// AllPricelistItems iterates over every rule matching query. Limit is the page size (default 100).
+func (c *Client) AllPricelistItems(ctx context.Context, query PricelistItemQuery) iter.Seq2[PricelistItem, error] {
+	return allPages(query.Limit, query.Offset, 100, func(limit, offset int) ([]PricelistItem, error) {
+		query.Limit, query.Offset = limit, offset
+		return c.SearchPricelistItems(ctx, query)
+	})
+}
+
 // CountProductCategories returns how many categories match the query's Type, Domain and ParentID;
 // Limit, Offset and Order are ignored.
 func (c *Client) CountProductCategories(ctx context.Context, query ProductCategoryQuery) (int, error) {

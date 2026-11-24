@@ -219,6 +219,36 @@ id, err := client.CreateSaleOrder(ctx, odoo.CreateSaleOrderRequest{
 // Handle err, then use id. Creation is never retried automatically.
 ```
 
+## Pricelists
+
+The Go SDK reads `product.pricelist` and `product.pricelist.item`, and can create a pricelist or
+a fixed-price rule for one product template or variant. Rules for categories, all products,
+discounts and formulas can be read but are not created by the typed write API. Prices are in the
+pricelist currency. Use Odoo's UTC `YYYY-MM-DD HH:MM:SS` format for optional rule dates.
+
+```go
+listID, err := client.CreatePricelist(ctx, odoo.CreatePricelistRequest{
+    Name: "Retail", CurrencyID: 7, // omit CurrencyID to use the company currency
+})
+// Handle err before using listID.
+
+ruleID, err := client.CreateFixedPricelistItem(ctx, odoo.CreateFixedPricelistItemRequest{
+    PricelistID: listID, ProductTemplateID: 20, FixedPrice: 12.5,
+})
+// ProductID selects a variant instead of ProductTemplateID. Exactly one is required.
+
+lists, err := client.SearchPricelists(ctx, odoo.PricelistQuery{Limit: 100})
+rules, err := client.SearchPricelistItems(ctx, odoo.PricelistItemQuery{
+    Domain: []any{[]any{"pricelist_id", "=", listID}},
+})
+partnerLists, err := client.PartnerPricelists(ctx, []int{15})
+_ = ruleID; _ = lists; _ = rules; _ = partnerLists; _ = err
+```
+
+`GetPricelist` returns `ErrPricelistNotFound` when no visible list matches. `CountPricelistItems`
+and `AllPricelistItems` support counting and paging rules. Writes are never retried automatically;
+after a transport error, inspect Odoo before resubmitting to avoid duplicate lists or rules.
+
 ## Deliveries, invoices and payments
 
 Read-only views of what happened to an order after it was confirmed. They need `stock` and

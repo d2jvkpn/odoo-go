@@ -16,6 +16,8 @@ var (
 
 	// ErrProductNotFound means no product visible to this user matched.
 	ErrProductNotFound = errors.New("product not found")
+	// ErrPricelistNotFound means no visible pricelist matched the ID.
+	ErrPricelistNotFound = errors.New("pricelist not found")
 	// ErrBOMNotFound means no bill of materials visible to this user matched the ID.
 	ErrBOMNotFound = errors.New("bill of materials not found")
 	// ErrProductCategoryNotFound means no category visible to this user matched.
