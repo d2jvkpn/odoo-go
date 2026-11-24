@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -9,6 +11,71 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestBuildExportRecordsSourceStats(t *testing.T) {
+	var (
+		src     fakeSource
+		file    *CatalogFile
+		omitted int
+		err     error
+		path    string
+		data    []byte
+		zero    int
+		one     = 1
+		two     = 2
+	)
+
+	src = fakeSource{variants: []odoo.CatalogVariant{
+		sourceVariant(1, 10, "A", "", nil, true),
+		sourceVariant(2, 20, "B", "", nil, false),
+		sourceVariant(3, 10, "A", "A-3", nil, true),
+	}}
+	file, omitted, err = buildExport(context.Background(), src, "src", "http://source", time.Now(), "products")
+	require.NoError(t, err)
+	assert.Equal(t, 1, omitted)
+	require.NotNil(t, file.Source.Stats)
+	assert.Equal(t, CatalogExportStats{
+		Units: 1, Categories: &one, Attributes: &zero, Templates: &one, Variants: &two,
+		ActiveWithoutCode: &one, OmittedArchivedWithoutCode: &one,
+	}, *file.Source.Stats)
+	path = filepath.Join(t.TempDir(), "products.json")
+	require.NoError(t, writeCatalogFile(path, file))
+	data, err = os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), `"active_variants_without_default_code": 1`)
+	assert.Contains(t, string(data), `"omitted_archived_variants_without_default_code": 1`)
+	assert.NotContains(t, string(data), `"boms":`)
+
+	file, _, err = buildExport(context.Background(), bomSource(), "src", "http://source", time.Now(), "boms")
+	require.NoError(t, err)
+	require.NotNil(t, file.Source.Stats)
+	assert.Equal(t, CatalogExportStats{Units: 1, BOMs: &two}, *file.Source.Stats)
+	path = filepath.Join(t.TempDir(), "boms.json")
+	require.NoError(t, writeCatalogFile(path, file))
+	data, err = os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), `"boms": 2`)
+	assert.NotContains(t, string(data), `"templates": 0`)
+	assert.NotContains(t, string(data), `"variants": 0`)
+	assert.NotContains(t, string(data), `"categories": 0`)
+	assert.NotContains(t, string(data), `"attributes": 0`)
+	assert.NotContains(t, string(data), `"active_variants_without_default_code":`)
+	assert.NotContains(t, string(data), `"omitted_archived_variants_without_default_code":`)
+
+	file, _, err = buildExport(context.Background(), fakeSource{}, "src", "http://source", time.Now(), "products")
+	require.NoError(t, err)
+	require.NotNil(t, file.Source.Stats)
+	assert.Equal(t, CatalogExportStats{
+		Categories: &zero, Attributes: &zero, Templates: &zero, Variants: &zero,
+		ActiveWithoutCode: &zero, OmittedArchivedWithoutCode: &zero,
+	}, *file.Source.Stats)
+	path = filepath.Join(t.TempDir(), "empty.json")
+	require.NoError(t, writeCatalogFile(path, file))
+	data, err = os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), `"stats": {`)
+	assert.Contains(t, string(data), `"units": 0`)
+}
 
 type fakeSource struct {
 	variants []odoo.CatalogVariant
@@ -68,7 +135,8 @@ func TestBuildExportGroupsVariantsByTemplateAndSortsEverything(t *testing.T) {
 	assert.Equal(t, formatVersion, f.Format)
 	assert.Equal(t, "2026-11-21T10:00:00Z", f.ExportedAt)
 	assert.Equal(t, "products", f.Section)
-	assert.Equal(t, FileSource{Filename: "src", BaseURL: "http://odoo.example"}, f.Source)
+	assert.Equal(t, "src", f.Source.Filename)
+	assert.Equal(t, "http://odoo.example", f.Source.BaseURL)
 	assert.Equal(t, []FileCategory{{Path: "蔬菜 / 番茄类"}}, f.Categories)
 	assert.Equal(t, []FileAttribute{{Name: "规格", Values: []string{"1.5kg", "1kg"}}}, f.Attributes)
 

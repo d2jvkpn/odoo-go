@@ -15,21 +15,22 @@ import (
 )
 
 const usage = `Usage:
-  odoo-sync products export -source source.yaml -out products.json
-  odoo-sync products check  -in products.json [-target target.yaml] [-empty-code reject|skip]
+  odoo-sync products export -source source.yaml[:section] -out products.json
+  odoo-sync products check  -in products.json [-target target.yaml[:section]] [-empty-code reject|skip]
                             [-sale-ok all|only] [-no-create-deps]
-  odoo-sync products import -target target.yaml -in products.json [-dry-run] [-empty-code reject|skip]
+  odoo-sync products import -target target.yaml[:section] -in products.json [-dry-run] [-empty-code reject|skip]
                             [-sale-ok all|only] [-no-create-deps] [-map-out map.csv]
   odoo-sync boms export|check|import   same flags as products, without -sale-ok and -map-out
-  odoo-sync partners export -source source.yaml -out partners.json [--infer-country-from-state]
-  odoo-sync partners check  -in partners.json [-target target.yaml] [-empty-key reject|skip]
+  odoo-sync partners export -source source.yaml[:section] -out partners.json [--infer-country-from-state]
+  odoo-sync partners check  -in partners.json [-target target.yaml[:section]] [-empty-key reject|skip]
                             [-no-create-deps]
-  odoo-sync partners import -target target.yaml -in partners.json [-dry-run]
+  odoo-sync partners import -target target.yaml[:section] -in partners.json [-dry-run]
                             [-empty-key reject|skip] [-no-create-deps]
 
-Connection files are the YAML configuration read by odoo.LoadClient (odoo.base_url, odoo.api_key,
-optional odoo.db). Products are matched between databases by default_code only. Import products
-before boms: a BOM needs its products to exist in the target.
+Connection arguments accept a YAML path (odoo.base_url, odoo.api_key, optional odoo.db), or
+path.yaml:section to select a named top-level YAML section with those fields. Products are matched
+between databases by default_code only. Import products before boms: a BOM needs its products to
+exist in the target.
 Partners are matched by ref, then vat, then email; children by parent, type and name.
 `
 
@@ -104,7 +105,7 @@ func runCheck(ctx context.Context, section string, args []string, out io.Writer)
 	flags = flag.NewFlagSet("odoo-sync "+section+" check", flag.ContinueOnError)
 	flags.SetOutput(out)
 	in = flags.String("in", "", "catalog file")
-	target = flags.String("target", "", "optional target connection file for import preflight")
+	target = flags.String("target", "", "optional target connection path[:section] for import preflight")
 	emptyCode = flags.String("empty-code", emptyCodeReject, "variants without default_code: reject or skip")
 	saleOK = flags.String("sale-ok", saleOKAll, "which templates to check: all or only (sale_ok)")
 	noCreateDeps = flags.Bool("no-create-deps", false, "fail if a target dependency is missing; requires -target")
@@ -143,7 +144,7 @@ func runCheck(ctx context.Context, section string, args []string, out io.Writer)
 		return reportProblems(out, problems)
 	}
 	if *target != "" {
-		if client, err = odoo.LoadClient(*target); err != nil {
+		if client, err = loadSyncClient(*target); err != nil {
 			return err
 		}
 		if snap, err = loadSnapshot(ctx, client, opt.BOMs); err != nil {
@@ -173,6 +174,7 @@ func runExport(ctx context.Context, section string, args []string, out io.Writer
 		dest    *string
 		client  *odoo.Client
 		f       *CatalogFile
+		stats   *CatalogExportStats
 		count   int
 		uncoded int
 		omitted int
@@ -181,7 +183,7 @@ func runExport(ctx context.Context, section string, args []string, out io.Writer
 
 	flags = flag.NewFlagSet("odoo-sync "+section+" export", flag.ContinueOnError)
 	flags.SetOutput(out)
-	source = flags.String("source", "", "connection file of the source Odoo")
+	source = flags.String("source", "", "source connection path[:section]")
 	dest = flags.String("out", "", "catalog file to write")
 	if err = flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -192,7 +194,7 @@ func runExport(ctx context.Context, section string, args []string, out io.Writer
 	if *source == "" || *dest == "" {
 		return errors.New("-source and -out are required")
 	}
-	if client, err = odoo.LoadClient(*source); err != nil {
+	if client, err = loadSyncClient(*source); err != nil {
 		return err
 	}
 	if f, omitted, err = buildExport(ctx, client, *source, client.BaseURL, time.Now(), section); err != nil {
@@ -201,15 +203,13 @@ func runExport(ctx context.Context, section string, args []string, out io.Writer
 	if err = writeCatalogFile(*dest, f); err != nil {
 		return err
 	}
-	for _, t := range f.Templates {
-		count += len(t.Variants)
-		for _, v := range t.Variants {
-			if v.Active && v.DefaultCode == "" {
-				uncoded++
-			}
-		}
+	stats = f.Source.Stats
+	if stats.Variants != nil {
+		count = *stats.Variants
+		uncoded = *stats.ActiveWithoutCode
 	}
-	fmt.Fprintf(out, "exported %d templates, %d variants, %d boms to %s\n", len(f.Templates), count, len(f.BOMs), *dest)
+	fmt.Fprintf(out, "exported %d templates, %d variants, %d boms to %s\n",
+		len(f.Templates), count, len(f.BOMs), *dest)
 	if omitted > 0 {
 		fmt.Fprintf(out, "omitted %d archived variants without default_code\n", omitted)
 	}
@@ -217,7 +217,9 @@ func runExport(ctx context.Context, section string, args []string, out io.Writer
 		if uncoded == 1 {
 			fmt.Fprintln(out, "warning: 1 active variant without default_code was exported; products import rejects it by default")
 		} else {
-			fmt.Fprintf(out, "warning: %d active variants without default_code were exported; products import rejects them by default\n", uncoded)
+			fmt.Fprintf(out, "warning: %d active variants without default_code were exported; "+
+				"products import rejects them by default\n",
+				uncoded)
 		}
 	}
 	return nil
@@ -246,7 +248,7 @@ func runImport(ctx context.Context, section string, args []string, out io.Writer
 
 	flags = flag.NewFlagSet("odoo-sync "+section+" import", flag.ContinueOnError)
 	flags.SetOutput(out)
-	target = flags.String("target", "", "connection file of the target Odoo")
+	target = flags.String("target", "", "target connection path[:section]")
 	in = flags.String("in", "", "catalog file to import")
 	dryRun = flags.Bool("dry-run", false, "print the plan and write nothing")
 	emptyCode = flags.String("empty-code", emptyCodeReject, "variants without default_code: reject or skip")
@@ -285,7 +287,7 @@ func runImport(ctx context.Context, section string, args []string, out io.Writer
 	}
 	opt.NoProducts = !products
 	opt.BOMs = opt.BOMs && len(f.BOMs) > 0 // nothing to reconcile, so the target's BOMs are not read
-	if client, err = odoo.LoadClient(*target); err != nil {
+	if client, err = loadSyncClient(*target); err != nil {
 		return err
 	}
 	if snap, err = loadSnapshot(ctx, client, opt.BOMs); err != nil {

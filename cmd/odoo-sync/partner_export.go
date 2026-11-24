@@ -39,6 +39,7 @@ func buildPartnerExport(
 		inFile   = make(map[int]bool)
 		warnings []string
 		out      *PartnersFile
+		stats    PartnerExportStats
 		err      error
 	)
 
@@ -67,7 +68,7 @@ func buildPartnerExport(
 	sort.Slice(partners, func(i, j int) bool { return partners[i].ID < partners[j].ID })
 	out = &PartnersFile{
 		Format: partnersFormat, ExportedAt: now.UTC().Format(time.RFC3339),
-		Source: FileSource{Filename: filename, BaseURL: baseURL},
+		Source: PartnerFileSource{Filename: filename, BaseURL: baseURL},
 	}
 	for _, p := range partners {
 		if strings.TrimSpace(p.Name) == "" {
@@ -114,5 +115,7 @@ func buildPartnerExport(
 		fp.Categories = slices.Compact(fp.Categories) // two tags may share a name under different parents
 		out.Partners = append(out.Partners, fp)
 	}
+	stats = calculatePartnerStats(out)
+	out.Source.Stats = &stats
 	return out, warnings, nil
 }

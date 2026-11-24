@@ -46,7 +46,8 @@
   keeps `omitempty` so an empty list can still clear all tags. Tests may still use
   `encoding/json` as an independent reference.
 - Configuration is loaded from YAML (`odoo.base_url`, `odoo.api_key`, optional `odoo.db`) by
-  `odoo.LoadClient`; default path `configs/local.yaml`, which is not committed.
+  `odoo.LoadClient`; `odoo.LoadClientSection` selects another top-level section for `odoo-sync`.
+  Default path `configs/local.yaml` is not committed.
 - Write calls such as order, product, and partner creation, updates, stock changes, order
   confirm/cancel, delivery validation, and the generic `Call` are never retried automatically.
   `Client.Retry` (or `odoo.max_retries`) opts read-only calls (`CallRead`, `Search*`, `Get*`,

@@ -34,6 +34,7 @@ func buildExport(
 		omitted  int
 		variants []odoo.CatalogVariant
 		out      *CatalogFile
+		stats    *CatalogExportStats
 		err      error
 	)
 
@@ -62,8 +63,31 @@ func buildExport(
 	if out.Units, err = exportUnits(ctx, src, out); err != nil {
 		return nil, 0, fmt.Errorf("export units: %w", err)
 	}
+	stats = &CatalogExportStats{Units: len(out.Units)}
+	if section != "boms" {
+		stats.Categories = exportCount(len(out.Categories))
+		stats.Attributes = exportCount(len(out.Attributes))
+		stats.Templates = exportCount(len(out.Templates))
+		stats.Variants = exportCount(0)
+		stats.ActiveWithoutCode = exportCount(0)
+		stats.OmittedArchivedWithoutCode = exportCount(omitted)
+		for _, template := range out.Templates {
+			*stats.Variants += len(template.Variants)
+			for _, variant := range template.Variants {
+				if variant.Active && variant.DefaultCode == "" {
+					*stats.ActiveWithoutCode++
+				}
+			}
+		}
+	}
+	if section != "products" {
+		stats.BOMs = exportCount(len(out.BOMs))
+	}
+	out.Source.Stats = stats
 	return out, omitted, nil
 }
+
+func exportCount(n int) *int { return &n }
 
 // exportUnits includes only units named by exported records and their reference ancestors.
 func exportUnits(ctx context.Context, src catalogSource, file *CatalogFile) ([]FileUoM, error) {

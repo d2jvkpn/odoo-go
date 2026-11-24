@@ -23,15 +23,37 @@ target/odoo-sync partners check  -in data/partners.json -target configs/target.y
 target/odoo-sync partners import -target configs/target.yaml -in data/partners.json -dry-run
 ```
 
-Connection files are read by `odoo.LoadClient` (`odoo.base_url`, `odoo.api_key`, optional
-`odoo.db`). Copy [`examples/odoo-sync.yaml`](../examples/odoo-sync.yaml) into separate source and
-target connection files, then set each file's URL, API key and database name. Both databases need
-the sales and inventory modules, because product reads request
-`is_storable`. BOMs also need the Manufacturing module (`mrp`); on a database without it, use only
-the `products` and `partners` groups. Partners need only `base`.
+By default, connection files are read by `odoo.LoadClient` (`odoo.base_url`, `odoo.api_key`,
+optional `odoo.db`). Copy [`examples/odoo-sync.yaml`](../examples/odoo-sync.yaml) into separate
+source and target connection files, then set each file's URL, API key and database name. Both
+databases need the sales and inventory modules, because product reads request `is_storable`. BOMs
+also need the Manufacturing module (`mrp`); on a database without it, use only the `products` and
+`partners` groups. Partners need only `base`.
+
+To keep multiple connections in one YAML file, put each connection under its own top-level key
+with `base_url`, `api_key` and optional `db` and `max_retries`. Select one with `path:key`:
+
+```sh
+target/odoo-sync products export -source configs/test.odoo.yaml:meiyuan_test -out data/products.json
+target/odoo-sync products check -in data/products.json -target configs/test.odoo.yaml:jubao_test
+target/odoo-sync products import -target configs/test.odoo.yaml:jubao_test -in data/products.json -dry-run
+```
+
+Without `:key`, the command uses the original `odoo` section. A connection file path containing
+`:` is not supported by this selector syntax.
 
 Every export records the `-source` argument unchanged as `source.filename` in the JSON file.
-`source.base_url` records the configured Odoo URL. These fields are informational.
+`source.base_url` records the configured Odoo URL. New catalog exports include `source.stats`.
+All catalog files count `units`. Product files add `categories`, `attributes`, `templates`,
+`variants`, `active_variants_without_default_code` (exported) and
+`omitted_archived_variants_without_default_code` (excluded). BOM files add `boms`. Each count
+appears only when that section is exported, including a count of zero. BOM-only files count the
+BOMs and their units; products read to resolve BOM references are not counted as exported products.
+Partner exports include `source.stats.records` and `source.stats.groups`. Each group corresponds
+to a `partners check` row, with `parent_type`, `records`, `with_children`, company counts, unique
+and duplicate name counts, and direct child counts by type. Zero-valued optional group counts are
+omitted. These stats are informational. Older files without `source.stats` remain readable; import
+never uses it.
 
 `check -in` validates the file and the default import policy: it reports uncoded product variants,
 BOM products or components without a code, and top-level partners without a match key. Use

@@ -35,7 +35,7 @@ func runPartners(ctx context.Context, args []string, out io.Writer) error {
 func runPartnersExport(ctx context.Context, args []string, out io.Writer) error {
 	var (
 		flags        = flag.NewFlagSet("odoo-sync partners export", flag.ContinueOnError)
-		source       = flags.String("source", "", "connection file of the source Odoo")
+		source       = flags.String("source", "", "source connection path[:section]")
 		dest         = flags.String("out", "", "partners file to write")
 		inferCountry = flags.Bool("infer-country-from-state", false, "fill a missing country from the state record")
 		client       *odoo.Client
@@ -54,7 +54,7 @@ func runPartnersExport(ctx context.Context, args []string, out io.Writer) error 
 	if *source == "" || *dest == "" {
 		return errors.New("-source and -out are required")
 	}
-	if client, err = odoo.LoadClient(*source); err != nil {
+	if client, err = loadSyncClient(*source); err != nil {
 		return err
 	}
 	if f, warnings, err = buildPartnerExport(ctx, client, *source, client.BaseURL, time.Now(), *inferCountry); err != nil {
@@ -74,7 +74,7 @@ func runPartnersCheck(ctx context.Context, args []string, out io.Writer) error {
 	var (
 		flags        = flag.NewFlagSet("odoo-sync partners check", flag.ContinueOnError)
 		in           = flags.String("in", "", "partners file")
-		target       = flags.String("target", "", "optional target connection file for import preflight")
+		target       = flags.String("target", "", "optional target connection path[:section] for import preflight")
 		emptyKey     = flags.String("empty-key", emptyKeyReject, "top-level partners without a key: reject or skip")
 		noCreateDeps = flags.Bool("no-create-deps", false, "fail if a target tag is missing; requires -target")
 		f            *PartnersFile
@@ -112,7 +112,7 @@ func runPartnersCheck(ctx context.Context, args []string, out io.Writer) error {
 		return reportProblems(out, problems)
 	}
 	if *target != "" {
-		if client, err = odoo.LoadClient(*target); err != nil {
+		if client, err = loadSyncClient(*target); err != nil {
 			return err
 		}
 		if snap, err = loadPartnerSnapshot(ctx, client, f); err != nil {
@@ -135,7 +135,7 @@ func runPartnersCheck(ctx context.Context, args []string, out io.Writer) error {
 func runPartnersImport(ctx context.Context, args []string, out io.Writer) error {
 	var (
 		flags        = flag.NewFlagSet("odoo-sync partners import", flag.ContinueOnError)
-		target       = flags.String("target", "", "connection file of the target Odoo")
+		target       = flags.String("target", "", "target connection path[:section]")
 		in           = flags.String("in", "", "partners file to import")
 		dryRun       = flags.Bool("dry-run", false, "print the plan and write nothing")
 		emptyKey     = flags.String("empty-key", emptyKeyReject, "top-level partners without ref, vat and email: reject or skip")
@@ -168,7 +168,7 @@ func runPartnersImport(ctx context.Context, args []string, out io.Writer) error 
 	if problems = f.Validate(); len(problems) > 0 {
 		return reportProblems(out, problems)
 	}
-	if client, err = odoo.LoadClient(*target); err != nil {
+	if client, err = loadSyncClient(*target); err != nil {
 		return err
 	}
 	if snap, err = loadPartnerSnapshot(ctx, client, f); err != nil {

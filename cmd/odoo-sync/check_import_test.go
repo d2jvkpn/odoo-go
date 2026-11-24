@@ -76,9 +76,12 @@ func TestPartnersCheckPrintsNameStatsBeforePolicyProblems(t *testing.T) {
 	err := run(context.Background(), []string{"partners", "check", "-in", path}, &out)
 	require.ErrorContains(t, err, "nothing was written")
 	assert.Contains(t, out.String(), "ParentType  Records  WithChildren  Stats")
-	assert.Contains(t, out.String(), "top_level    2        1              names_unique=1, duplicate_names=1, duplicate_records=1, child_delivery=2")
-	assert.Contains(t, out.String(), "delivery     2        2              names_unique=2, child_contact=2")
-	assert.Contains(t, out.String(), "contact      2        0              names_unique=1, duplicate_names=1, duplicate_records=1")
+	assert.Contains(t, out.String(), "top_level   2        1             is_company=false:2, names_unique=1, "+
+		"duplicate_names=1, duplicate_records=1, child_delivery=2")
+	assert.Contains(t, out.String(), "delivery    2        2             is_company=false:2, "+
+		"names_unique=2, child_contact=2")
+	assert.Contains(t, out.String(), "contact     2        0             is_company=false:2, names_unique=1, "+
+		"duplicate_names=1, duplicate_records=1")
 	assert.Contains(t, out.String(), "\nWarnings\n")
 	assert.Contains(t, out.String(), "no ref, vat or email")
 }
@@ -95,10 +98,13 @@ func TestPartnersCheckPrintsDirectChildrenByParentKind(t *testing.T) {
 	require.NoError(t, writePartnersFile(path, f))
 	var out bytes.Buffer
 	require.NoError(t, run(context.Background(), []string{"partners", "check", "-in", path}, &out))
-	assert.Contains(t, out.String(), "top_level  1        1              names_unique=1, child_delivery=1, child_contact=1")
-	assert.Contains(t, out.String(), "delivery   1        1              names_unique=1, child_contact=1")
-	assert.Contains(t, out.String(), "contact    2        1              names_unique=2, child_invoice=1")
-	assert.Contains(t, out.String(), "invoice    1        0              names_unique=1")
+	assert.Contains(t, out.String(), "top_level   1        1             is_company=false:1, names_unique=1, "+
+		"child_contact=1, child_delivery=1")
+	assert.Contains(t, out.String(), "delivery    1        1             is_company=false:1, "+
+		"names_unique=1, child_contact=1")
+	assert.Contains(t, out.String(), "contact     2        1             is_company=false:2, "+
+		"names_unique=2, child_invoice=1")
+	assert.Contains(t, out.String(), "invoice     1        0             is_company=false:1, names_unique=1")
 }
 
 func TestProductsCheckWithTargetReportsMissingUnitWithoutWrites(t *testing.T) {

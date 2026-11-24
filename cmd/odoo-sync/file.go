@@ -28,8 +28,21 @@ type CatalogFile struct {
 
 // FileSource says where the file came from; it is informational.
 type FileSource struct {
-	Filename string `json:"filename"`
-	BaseURL  string `json:"base_url"`
+	Filename string              `json:"filename"`
+	BaseURL  string              `json:"base_url"`
+	Stats    *CatalogExportStats `json:"stats,omitempty"`
+}
+
+// CatalogExportStats counts records written to a catalog export, plus uncoded variants.
+type CatalogExportStats struct {
+	Units                      int  `json:"units"`
+	Categories                 *int `json:"categories,omitempty"`
+	Attributes                 *int `json:"attributes,omitempty"`
+	Templates                  *int `json:"templates,omitempty"`
+	Variants                   *int `json:"variants,omitempty"`
+	BOMs                       *int `json:"boms,omitempty"`
+	ActiveWithoutCode          *int `json:"active_variants_without_default_code,omitempty"`
+	OmittedArchivedWithoutCode *int `json:"omitted_archived_variants_without_default_code,omitempty"`
 }
 
 // FileUoM describes an Odoo 19 unit. RelativeTo names its reference unit;

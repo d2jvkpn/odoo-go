@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -9,6 +11,49 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestBuildPartnerExportRecordsCheckStatistics(t *testing.T) {
+	var (
+		src  fakePartnerSource
+		file *PartnersFile
+		path string
+		data []byte
+		err  error
+	)
+
+	src.partners = []odoo.SyncPartner{
+		srcPartner(1, "Customer", 0, true),
+		srcPartner(2, "Customer", 0, true),
+		srcPartner(3, "Shop A", 1, true),
+		srcPartner(4, "Shop B", 1, true),
+		srcPartner(5, "Store contact", 3, true),
+		srcPartner(6, "Store contact", 4, true),
+	}
+	src.partners[0].IsCompany = true
+	src.partners[2].Type, src.partners[3].Type = "delivery", "delivery"
+	file, _, err = buildPartnerExport(context.Background(), src, "src", "http://source", time.Now(), false)
+	require.NoError(t, err)
+	require.NotNil(t, file.Source.Stats)
+	assert.Equal(t, PartnerExportStats{
+		Records: 6,
+		Groups: []PartnerGroupStats{
+			{ParentType: "top_level", Records: 2, WithChildren: 1, IsCompanyTrue: 1, IsCompanyFalse: 1,
+				NamesUnique: 1, DuplicateNames: 1, DuplicateRecords: 1, ChildDelivery: 2},
+			{ParentType: "delivery", Records: 2, WithChildren: 2, IsCompanyFalse: 2,
+				NamesUnique: 2, ChildContact: 2},
+			{ParentType: "contact", Records: 2, IsCompanyFalse: 2, NamesUnique: 1,
+				DuplicateNames: 1, DuplicateRecords: 1},
+		},
+	}, *file.Source.Stats)
+	path = filepath.Join(t.TempDir(), "partners.json")
+	require.NoError(t, writePartnersFile(path, file))
+	data, err = os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), `"stats": {`)
+	assert.Contains(t, string(data), `"parent_type": "delivery"`)
+	assert.Contains(t, string(data), `"duplicate_names": 1`)
+	assert.Contains(t, string(data), `"child_delivery": 2`)
+}
 
 type fakePartnerSource struct {
 	partners []odoo.SyncPartner

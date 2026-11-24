@@ -13,10 +13,17 @@ const partnersFormat = 1
 
 // PartnersFile is the partner export file. Source ids are records only and are never used to match.
 type PartnersFile struct {
-	Format     int           `json:"format"`
-	ExportedAt string        `json:"exported_at"`
-	Source     FileSource    `json:"source"`
-	Partners   []FilePartner `json:"partners"`
+	Format     int               `json:"format"`
+	ExportedAt string            `json:"exported_at"`
+	Source     PartnerFileSource `json:"source"`
+	Partners   []FilePartner     `json:"partners"`
+}
+
+// PartnerFileSource records where a partner export came from and its informational statistics.
+type PartnerFileSource struct {
+	Filename string              `json:"filename"`
+	BaseURL  string              `json:"base_url"`
+	Stats    *PartnerExportStats `json:"stats,omitempty"`
 }
 
 // FilePartner is one res.partner. Country, State and Categories are names, because ids differ per
