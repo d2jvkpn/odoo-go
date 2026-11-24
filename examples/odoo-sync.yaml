@@ -1,0 +1,7 @@
+# Copy this template to separate source and target files for odoo-sync.
+# Pass the files with -source and -target, respectively, after replacing the values below.
+odoo:
+  base_url: https://odoo.example.com
+  api_key: replace-with-api-key
+  # Optional; omit when the Odoo server does not need an explicit database name.
+  db: database_name

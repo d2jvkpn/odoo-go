@@ -24,7 +24,9 @@ target/odoo-sync partners import -target configs/target.yaml -in data/partners.j
 ```
 
 Connection files are read by `odoo.LoadClient` (`odoo.base_url`, `odoo.api_key`, optional
-`odoo.db`). Both databases need the sales and inventory modules, because product reads request
+`odoo.db`). Copy [`examples/odoo-sync.yaml`](../examples/odoo-sync.yaml) into separate source and
+target connection files, then set each file's URL, API key and database name. Both databases need
+the sales and inventory modules, because product reads request
 `is_storable`. BOMs also need the Manufacturing module (`mrp`); on a database without it, use only
 the `products` and `partners` groups. Partners need only `base`.
 
